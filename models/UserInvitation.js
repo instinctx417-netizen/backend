@@ -10,8 +10,7 @@ class UserInvitation {
       organizationId,
       invitedByUserId,
       email,
-      role,
-      departmentId
+      role
     } = invitationData;
 
     // Generate unique token
@@ -21,10 +20,10 @@ class UserInvitation {
 
     const query = `
       INSERT INTO user_invitations (
-        organization_id, invited_by_user_id, email, role, department_id,
+        organization_id, invited_by_user_id, email, role,
         token, status, expires_at, created_at, updated_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7, NOW(), NOW())
+      VALUES ($1, $2, $3, $4, $5, 'pending', $6, NOW(), NOW())
       RETURNING *
     `;
 
@@ -33,7 +32,6 @@ class UserInvitation {
       invitedByUserId,
       email,
       role,
-      departmentId || null,
       token,
       expiresAt
     ]);
@@ -49,12 +47,10 @@ class UserInvitation {
       SELECT 
         ui.*,
         o.name as organization_name,
-        d.name as department_name,
         u.first_name as invited_by_first_name,
         u.last_name as invited_by_last_name
       FROM user_invitations ui
       JOIN organizations o ON o.id = ui.organization_id
-      LEFT JOIN departments d ON d.id = ui.department_id
       JOIN users u ON u.id = ui.invited_by_user_id
       WHERE ui.token = $1
     `;
@@ -69,13 +65,11 @@ class UserInvitation {
     const query = `
       SELECT 
         ui.*,
-        d.name as department_name,
         u1.first_name as invited_by_first_name,
         u1.last_name as invited_by_last_name,
         u2.first_name as verified_by_first_name,
         u2.last_name as verified_by_last_name
       FROM user_invitations ui
-      LEFT JOIN departments d ON d.id = ui.department_id
       JOIN users u1 ON u1.id = ui.invited_by_user_id
       LEFT JOIN users u2 ON u2.id = ui.verified_by_admin_id
       WHERE ui.organization_id = $1
@@ -93,12 +87,10 @@ class UserInvitation {
       SELECT 
         ui.*,
         o.name as organization_name,
-        d.name as department_name,
         u.first_name as invited_by_first_name,
         u.last_name as invited_by_last_name
       FROM user_invitations ui
       JOIN organizations o ON o.id = ui.organization_id
-      LEFT JOIN departments d ON d.id = ui.department_id
       JOIN users u ON u.id = ui.invited_by_user_id
       WHERE ui.status = 'pending' AND ui.expires_at > NOW()
       ORDER BY ui.created_at DESC
@@ -115,12 +107,10 @@ class UserInvitation {
       SELECT 
         ui.*,
         o.name as organization_name,
-        d.name as department_name,
         u.first_name as invited_by_first_name,
         u.last_name as invited_by_last_name
       FROM user_invitations ui
       JOIN organizations o ON o.id = ui.organization_id
-      LEFT JOIN departments d ON d.id = ui.department_id
       JOIN users u ON u.id = ui.invited_by_user_id
       WHERE ui.status = 'approved'
       ORDER BY ui.verified_at DESC, ui.created_at DESC
@@ -137,12 +127,10 @@ class UserInvitation {
       SELECT 
         ui.*,
         o.name as organization_name,
-        d.name as department_name,
         u1.first_name as invited_by_first_name,
         u1.last_name as invited_by_last_name
       FROM user_invitations ui
       JOIN organizations o ON o.id = ui.organization_id
-      LEFT JOIN departments d ON d.id = ui.department_id
       JOIN users u1 ON u1.id = ui.invited_by_user_id
       WHERE ui.id = $1
     `;

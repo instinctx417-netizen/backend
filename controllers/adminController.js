@@ -117,8 +117,6 @@ exports.getInvitations = async (req, res) => {
       invitedByLastName: inv.invited_by_last_name,
       email: inv.email,
       role: inv.role,
-      departmentId: inv.department_id,
-      departmentName: inv.department_name,
       status: inv.status,
       expiresAt: inv.expires_at,
       verifiedAt: inv.verified_at,

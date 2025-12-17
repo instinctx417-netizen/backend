@@ -5,16 +5,15 @@ class UserOrganization {
    * Add user to organization
    */
   static async create(userOrgData) {
-    const { userId, organizationId, departmentId, role, isPrimary } = userOrgData;
+    const { userId, organizationId, role, isPrimary } = userOrgData;
     const query = `
-      INSERT INTO user_organizations (user_id, organization_id, department_id, role, is_primary, joined_at)
-      VALUES ($1, $2, $3, $4, $5, NOW())
+      INSERT INTO user_organizations (user_id, organization_id, role, is_primary, joined_at)
+      VALUES ($1, $2, $3, $4, NOW())
       RETURNING *
     `;
     const result = await pool.query(query, [
       userId, 
       organizationId, 
-      departmentId || null, 
       role, 
       isPrimary || false
     ]);
@@ -31,11 +30,9 @@ class UserOrganization {
         o.name as organization_name,
         o.industry,
         o.company_size,
-        o.status,
-        d.name as department_name
+        o.status
       FROM user_organizations uo
       JOIN organizations o ON o.id = uo.organization_id
-      LEFT JOIN departments d ON d.id = uo.department_id
       WHERE uo.user_id = $1
       ORDER BY uo.is_primary DESC, uo.joined_at DESC
     `;
@@ -54,11 +51,9 @@ class UserOrganization {
         u.email,
         u.first_name,
         u.last_name,
-        u.user_type,
-        d.name as department_name
+        u.user_type
       FROM user_organizations uo
       JOIN users u ON u.id = uo.user_id
-      LEFT JOIN departments d ON d.id = uo.department_id
       WHERE uo.organization_id = $1
       ORDER BY uo.role, u.first_name, u.last_name
     `;
@@ -74,11 +69,9 @@ class UserOrganization {
       SELECT 
         uo.*,
         o.name as organization_name,
-        o.status,
-        d.name as department_name
+        o.status
       FROM user_organizations uo
       JOIN organizations o ON o.id = uo.organization_id
-      LEFT JOIN departments d ON d.id = uo.department_id
       WHERE uo.user_id = $1 AND uo.organization_id = $2
     `;
     const result = await pool.query(query, [userId, organizationId]);
@@ -89,16 +82,15 @@ class UserOrganization {
    * Update user organization
    */
   static async update(id, updateData) {
-    const { departmentId, role, isPrimary } = updateData;
+    const { role, isPrimary } = updateData;
     const query = `
       UPDATE user_organizations 
-      SET department_id = COALESCE($1, department_id),
-          role = COALESCE($2, role),
-          is_primary = COALESCE($3, is_primary)
-      WHERE id = $4
+      SET role = COALESCE($1, role),
+          is_primary = COALESCE($2, is_primary)
+      WHERE id = $3
       RETURNING *
     `;
-    const result = await pool.query(query, [departmentId, role, isPrimary, id]);
+    const result = await pool.query(query, [role, isPrimary, id]);
     return result.rows[0];
   }
 

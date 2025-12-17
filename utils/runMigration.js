@@ -43,6 +43,12 @@ async function runMigrations() {
     await pool.query(sql6);
     console.log('✅ Migration 006 completed: organization name unique constraint removed');
 
+    // Run migration 007
+    const migration7 = path.join(__dirname, '..', 'migrations', '007_remove_invitation_department.sql');
+    const sql7 = fs.readFileSync(migration7, 'utf8');
+    await pool.query(sql7);
+    console.log('✅ Migration 007 completed: department_id removed from user_invitations and user_organizations');
+
     console.log('✅ All migrations completed successfully');
   } catch (error) {
     console.error('❌ Migration failed:', error);

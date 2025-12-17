@@ -105,7 +105,6 @@ exports.getUserOrganizations = async (req, res) => {
     const formattedOrgs = userOrgs.map(uo => ({
       id: uo.organization_id, // Use organization_id as the main id
       user_id: uo.user_id,
-      department_id: uo.department_id,
       role: uo.role,
       is_primary: uo.is_primary,
       joined_at: uo.joined_at,
@@ -113,7 +112,6 @@ exports.getUserOrganizations = async (req, res) => {
       industry: uo.industry,
       company_size: uo.company_size,
       status: uo.status,
-      department_name: uo.department_name,
     }));
 
     res.json({
@@ -155,8 +153,6 @@ exports.getOrganizationUsers = async (req, res) => {
       firstName: uo.first_name,
       lastName: uo.last_name,
       role: uo.role,
-      departmentId: uo.department_id,
-      departmentName: uo.department_name,
       isPrimary: uo.is_primary,
     }));
 

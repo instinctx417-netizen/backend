@@ -199,7 +199,6 @@ exports.register = async (req, res) => {
       await UserOrganization.create({
         userId: user.id,
         organizationId: invitation.organization_id,
-        departmentId: invitation.department_id,
         role: invitation.role,
         isPrimary: true,
       });
@@ -220,7 +219,6 @@ exports.register = async (req, res) => {
       await UserOrganization.create({
         userId: user.id,
         organizationId: organization.id,
-        departmentId: null,
         role: 'coo', // Primary client user is the COO (Chief Operating Officer)
         isPrimary: true,
       });

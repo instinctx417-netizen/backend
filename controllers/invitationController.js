@@ -15,7 +15,6 @@ const formatInvitationData = (invitation) => {
     invitedByUserId: invitation.invited_by_user_id,
     email: invitation.email,
     role: invitation.role,
-    departmentId: invitation.department_id,
     token: invitation.token,
     status: invitation.status,
     verifiedByAdminId: invitation.verified_by_admin_id,
@@ -23,7 +22,6 @@ const formatInvitationData = (invitation) => {
     expiresAt: invitation.expires_at,
     createdAt: invitation.created_at,
     updatedAt: invitation.updated_at,
-    departmentName: invitation.department_name,
     invitedByFirstName: invitation.invited_by_first_name,
     invitedByLastName: invitation.invited_by_last_name,
     verifiedByFirstName: invitation.verified_by_first_name,
@@ -37,7 +35,7 @@ const formatInvitationData = (invitation) => {
 exports.create = async (req, res) => {
   try {
     const { organizationId } = req.params;
-    const { email, role, departmentId } = req.body;
+    const { email, role } = req.body;
 
     // Verify user has permission (HR Coordinator or COO)
     const userOrg = await UserOrganization.findByUserAndOrganization(req.userId, organizationId);
@@ -79,8 +77,7 @@ exports.create = async (req, res) => {
       organizationId,
       invitedByUserId: req.userId,
       email,
-      role,
-      departmentId
+      role
     });
 
     // Create notification for admins (they need to verify)

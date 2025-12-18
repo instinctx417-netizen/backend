@@ -73,9 +73,9 @@ class JobRequest {
   }
 
   /**
-   * Find job requests by organization
+   * Find job requests by organization with optional pagination
    */
-  static async findByOrganization(organizationId, filters = {}) {
+  static async findByOrganization(organizationId, filters = {}, options = {}) {
     let query = `
       SELECT 
         jr.*,
@@ -103,8 +103,68 @@ class JobRequest {
       params.push(filters.departmentId);
     }
 
+    // Base grouping and ordering
     query += ` GROUP BY jr.id, d.name ORDER BY jr.created_at DESC`;
+
+    // Optional pagination
+    const page = options.page && options.page > 0 ? options.page : null;
+    const limit = options.limit && options.limit > 0 ? options.limit : null;
+
+    let totalCount = null;
+
+    if (page && limit) {
+      // Compute total count with same filters but without joins/grouping complexity
+      let countQuery = `
+        SELECT COUNT(*) 
+        FROM job_requests jr
+        WHERE jr.organization_id = $1
+      `;
+      const countParams = [organizationId];
+      let countParamCount = 1;
+
+      if (filters.status) {
+        countParamCount++;
+        countQuery += ` AND jr.status = $${countParamCount}`;
+        countParams.push(filters.status);
+      }
+
+      if (filters.departmentId) {
+        countParamCount++;
+        countQuery += ` AND jr.department_id = $${countParamCount}`;
+        countParams.push(filters.departmentId);
+      }
+
+      const countResult = await pool.query(countQuery, countParams);
+      totalCount = parseInt(countResult.rows[0].count, 10) || 0;
+
+      // Apply LIMIT/OFFSET to main query
+      paramCount++;
+      query += ` LIMIT $${paramCount}`;
+      params.push(limit);
+
+      paramCount++;
+      const offset = (page - 1) * limit;
+      query += ` OFFSET $${paramCount}`;
+      params.push(offset);
+    }
+
     const result = await pool.query(query, params);
+
+    if (page && limit) {
+      const totalPages = totalCount ? Math.ceil(totalCount / limit) : 1;
+      return {
+        data: result.rows,
+        pagination: {
+          page,
+          limit,
+          totalCount,
+          totalPages,
+          hasNext: page < totalPages,
+          hasPrev: page > 1,
+        },
+      };
+    }
+
     return result.rows;
   }
 
@@ -200,10 +260,10 @@ class JobRequest {
   }
 
   /**
-   * Find job requests assigned to HR user
+   * Find job requests assigned to HR user with optional pagination
    */
-  static async findByAssignedHR(hrUserId) {
-    const query = `
+  static async findByAssignedHR(hrUserId, options = {}) {
+    let query = `
       SELECT 
         jr.*,
         o.name as organization_name,
@@ -217,7 +277,45 @@ class JobRequest {
       WHERE jr.assigned_to_hr_user_id = $1
       ORDER BY jr.created_at DESC
     `;
-    const result = await pool.query(query, [hrUserId]);
+    const params = [hrUserId];
+
+    const page = options.page && options.page > 0 ? options.page : null;
+    const limit = options.limit && options.limit > 0 ? options.limit : null;
+    let totalCount = null;
+
+    if (page && limit) {
+      const countResult = await pool.query(
+        `
+          SELECT COUNT(*) 
+          FROM job_requests jr
+          WHERE jr.assigned_to_hr_user_id = $1
+        `,
+        [hrUserId]
+      );
+      totalCount = parseInt(countResult.rows[0].count, 10) || 0;
+
+      const offset = (page - 1) * limit;
+      params.push(limit, offset);
+      query += ` LIMIT $2 OFFSET $3`;
+    }
+
+    const result = await pool.query(query, params);
+
+    if (page && limit) {
+      const totalPages = totalCount ? Math.ceil(totalCount / limit) : 1;
+      return {
+        data: result.rows,
+        pagination: {
+          page,
+          limit,
+          totalCount,
+          totalPages,
+          hasNext: page < totalPages,
+          hasPrev: page > 1,
+        },
+      };
+    }
+
     return result.rows;
   }
 
@@ -246,9 +344,9 @@ class JobRequest {
   }
 
   /**
-   * Find all job requests (for admin)
+   * Find all job requests (for admin) with optional pagination
    */
-  static async findAll(filters = {}) {
+  static async findAll(filters = {}, options = {}) {
     let query = `
       SELECT 
         jr.*,
@@ -276,8 +374,62 @@ class JobRequest {
       params.push(filters.status);
     }
 
+    // Base grouping and ordering
     query += ` GROUP BY jr.id, o.name, d.name, u1.first_name, u1.last_name, u3.first_name, u3.last_name ORDER BY jr.created_at DESC`;
+
+    // If pagination options are provided, compute total count and apply LIMIT/OFFSET
+    const page = options.page && options.page > 0 ? options.page : null;
+    const limit = options.limit && options.limit > 0 ? options.limit : null;
+
+    let totalCount = null;
+
+    if (page && limit) {
+      // Compute total count with same filters but without joins/grouping complexity
+      let countQuery = `
+        SELECT COUNT(*) 
+        FROM job_requests jr
+        WHERE 1=1
+      `;
+      const countParams = [];
+      let countParamCount = 0;
+
+      if (filters.status) {
+        countParamCount++;
+        countQuery += ` AND jr.status = $${countParamCount}`;
+        countParams.push(filters.status);
+      }
+
+      const countResult = await pool.query(countQuery, countParams);
+      totalCount = parseInt(countResult.rows[0].count, 10) || 0;
+
+      // Apply LIMIT/OFFSET to main query
+      paramCount++;
+      query += ` LIMIT $${paramCount}`;
+      params.push(limit);
+
+      paramCount++;
+      const offset = (page - 1) * limit;
+      query += ` OFFSET $${paramCount}`;
+      params.push(offset);
+    }
+
     const result = await pool.query(query, params);
+
+    if (page && limit) {
+      const totalPages = totalCount ? Math.ceil(totalCount / limit) : 1;
+      return {
+        data: result.rows,
+        pagination: {
+          page,
+          limit,
+          totalCount,
+          totalPages,
+          hasNext: page < totalPages,
+          hasPrev: page > 1,
+        },
+      };
+    }
+
     return result.rows;
   }
 

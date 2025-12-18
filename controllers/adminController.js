@@ -97,15 +97,25 @@ exports.getInvitations = async (req, res) => {
       });
     }
 
-    const { status } = req.query;
-    let invitations;
+    const { status, page, limit } = req.query;
+    let result;
+
+    const pageNum = page ? parseInt(page, 10) || 1 : null;
+    const limitNum = limit ? parseInt(limit, 10) || 10 : 10;
 
     if (status === 'approved') {
-      invitations = await UserInvitation.findApproved();
+      result = pageNum
+        ? await UserInvitation.findApproved({ page: pageNum, limit: limitNum })
+        : await UserInvitation.findApproved();
     } else {
       // Default to pending
-      invitations = await UserInvitation.findPending();
+      result = pageNum
+        ? await UserInvitation.findPending({ page: pageNum, limit: limitNum })
+        : await UserInvitation.findPending();
     }
+
+    const invitations = pageNum ? result.data : result;
+    const pagination = pageNum ? result.pagination : undefined;
 
     // Format invitations
     const formattedInvitations = invitations.map(inv => ({
@@ -125,7 +135,10 @@ exports.getInvitations = async (req, res) => {
 
     res.json({
       success: true,
-      data: { invitations: formattedInvitations },
+      data: { 
+        invitations: formattedInvitations,
+        ...(pagination ? { pagination } : {}),
+      },
     });
   } catch (error) {
     console.error('Get invitations error:', error);
@@ -297,14 +310,26 @@ exports.getHRUsers = async (req, res) => {
       });
     }
 
-    const hrUsers = await User.findByType('hr');
+    const { page, limit } = req.query;
+    const pageNum = page ? parseInt(page, 10) || 1 : null;
+    const limitNum = limit ? parseInt(limit, 10) || 10 : 10;
+
+    const result = pageNum
+      ? await User.findByType('hr', { page: pageNum, limit: limitNum })
+      : await User.findByType('hr');
+
+    const hrUsers = pageNum ? result.data : result;
+    const pagination = pageNum ? result.pagination : undefined;
 
     // Format users (exclude password and convert to camelCase)
     const formattedUsers = hrUsers.map(user => formatUserData(user));
 
     res.json({
       success: true,
-      data: { users: formattedUsers },
+      data: { 
+        users: formattedUsers,
+        ...(pagination ? { pagination } : {}),
+      },
     });
   } catch (error) {
     console.error('Get HR users error:', error);
@@ -391,12 +416,21 @@ exports.getAllJobRequests = async (req, res) => {
       });
     }
 
-    const { status } = req.query;
+    const { status, page, limit } = req.query;
     const JobRequest = require('../models/JobRequest');
     const filters = {};
     if (status) filters.status = status;
 
-    const jobRequests = await JobRequest.findAll(filters);
+    // Optional pagination
+    const pageNum = page ? parseInt(page, 10) || 1 : null;
+    const limitNum = limit ? parseInt(limit, 10) || 10 : 10;
+
+    const result = pageNum
+      ? await JobRequest.findAll(filters, { page: pageNum, limit: limitNum })
+      : await JobRequest.findAll(filters);
+
+    const jobRequests = pageNum ? result.data : result;
+    const pagination = pageNum ? result.pagination : undefined;
 
     // Format job requests
     const formattedJobRequests = jobRequests.map(jr => ({
@@ -427,7 +461,10 @@ exports.getAllJobRequests = async (req, res) => {
 
     res.json({
       success: true,
-      data: { jobRequests: formattedJobRequests },
+      data: { 
+        jobRequests: formattedJobRequests,
+        ...(pagination ? { pagination } : {}),
+      },
     });
   } catch (error) {
     console.error('Get all job requests error:', error);
@@ -482,7 +519,17 @@ exports.getAllOrganizations = async (req, res) => {
     }
 
     const Organization = require('../models/Organization');
-    const organizations = await Organization.findAll();
+    const { page, limit } = req.query;
+
+    const pageNum = page ? parseInt(page, 10) || 1 : null;
+    const limitNum = limit ? parseInt(limit, 10) || 10 : 10;
+
+    const result = pageNum
+      ? await Organization.findAll({ page: pageNum, limit: limitNum })
+      : await Organization.findAll();
+
+    const organizations = pageNum ? result.data : result;
+    const pagination = pageNum ? result.pagination : undefined;
 
     // Format organizations
     const formattedOrganizations = organizations.map(org => ({
@@ -498,7 +545,10 @@ exports.getAllOrganizations = async (req, res) => {
 
     res.json({
       success: true,
-      data: { organizations: formattedOrganizations },
+      data: { 
+        organizations: formattedOrganizations,
+        ...(pagination ? { pagination } : {}),
+      },
     });
   } catch (error) {
     console.error('Get all organizations error:', error);
@@ -524,7 +574,16 @@ exports.getCandidateUsers = async (req, res) => {
       });
     }
 
-    const candidateUsers = await User.findByType('candidate');
+    const { page, limit } = req.query;
+    const pageNum = page ? parseInt(page, 10) || 1 : null;
+    const limitNum = limit ? parseInt(limit, 10) || 10 : 10;
+
+    const result = pageNum
+      ? await User.findByType('candidate', { page: pageNum, limit: limitNum })
+      : await User.findByType('candidate');
+
+    const candidateUsers = pageNum ? result.data : result;
+    const pagination = pageNum ? result.pagination : undefined;
     
     // Format candidate users (same format as HR endpoint)
     const formatUserData = (user) => {
@@ -550,7 +609,10 @@ exports.getCandidateUsers = async (req, res) => {
 
     res.json({
       success: true,
-      data: { candidates: formattedCandidates },
+      data: { 
+        candidates: formattedCandidates,
+        ...(pagination ? { pagination } : {}),
+      },
     });
   } catch (error) {
     console.error('Get candidate users error:', error);

@@ -5,6 +5,47 @@ const UserOrganization = require('../models/UserOrganization');
 const Notification = require('../models/Notification');
 
 /**
+ * Format interview data to camelCase
+ */
+function formatInterview(interview) {
+  if (!interview) return null;
+  
+  const scheduled_at = interview.scheduled_at 
+    ? (interview.scheduled_at instanceof Date 
+        ? interview.scheduled_at.toISOString() 
+        : interview.scheduled_at)
+    : null;
+
+  return {
+    id: interview.id,
+    jobRequestId: interview.job_request_id || interview.jobRequestId,
+    candidateId: interview.candidate_id || interview.candidateId,
+    scheduledByUserId: interview.scheduled_by_user_id || interview.scheduledByUserId,
+    scheduled_at: scheduled_at,
+    durationMinutes: interview.duration_minutes || interview.durationMinutes,
+    meetingLink: interview.meeting_link || interview.meetingLink,
+    meeting_platform: interview.meeting_platform || interview.meetingPlatform,
+    status: interview.status,
+    notes: interview.notes,
+    feedback: interview.feedback,
+    candidate_name: interview.candidate_name,
+    candidateEmail: interview.candidate_email || interview.candidateEmail,
+    job_title: interview.job_title,
+    organization_name: interview.organization_name,
+    department_name: interview.department_name,
+    scheduled_by_first_name: interview.scheduled_by_first_name,
+    scheduled_by_last_name: interview.scheduled_by_last_name,
+  };
+}
+
+/**
+ * Format array of interviews
+ */
+function formatInterviews(interviews) {
+  return interviews.map(formatInterview);
+}
+
+/**
  * Create a new interview
  */
 exports.create = async (req, res) => {
@@ -465,11 +506,25 @@ exports.getAll = async (req, res) => {
       });
     }
 
-    const interviews = await Interview.findAll();
+    const status = req.query.status && req.query.status !== 'all' ? req.query.status : null;
+    const { page, limit } = req.query;
+
+    const pageNum = page ? parseInt(page, 10) || 1 : null;
+    const limitNum = limit ? parseInt(limit, 10) || 10 : 10;
+
+    const result = pageNum
+      ? await Interview.findAll(status, { page: pageNum, limit: limitNum })
+      : await Interview.findAll(status);
+
+    const interviews = pageNum ? result.data : result;
+    const pagination = pageNum ? result.pagination : undefined;
 
     res.json({
       success: true,
-      data: { interviews },
+      data: { 
+        interviews: formatInterviews(interviews),
+        ...(pagination ? { pagination } : {}),
+      },
     });
   } catch (error) {
     console.error('Get all interviews error:', error);
@@ -495,11 +550,25 @@ exports.getByAssignedHR = async (req, res) => {
       });
     }
 
-    const interviews = await Interview.findByAssignedHR(req.userId);
+    const status = req.query.status && req.query.status !== 'all' ? req.query.status : null;
+    const { page, limit } = req.query;
+
+    const pageNum = page ? parseInt(page, 10) || 1 : null;
+    const limitNum = limit ? parseInt(limit, 10) || 10 : 10;
+
+    const result = pageNum
+      ? await Interview.findByAssignedHR(req.userId, status, { page: pageNum, limit: limitNum })
+      : await Interview.findByAssignedHR(req.userId, status);
+
+    const interviews = pageNum ? result.data : result;
+    const pagination = pageNum ? result.pagination : undefined;
 
     res.json({
       success: true,
-      data: { interviews },
+      data: { 
+        interviews: formatInterviews(interviews),
+        ...(pagination ? { pagination } : {}),
+      },
     });
   } catch (error) {
     console.error('Get HR assigned interviews error:', error);
@@ -516,11 +585,25 @@ exports.getByAssignedHR = async (req, res) => {
  */
 exports.getByParticipant = async (req, res) => {
   try {
-    const interviews = await Interview.findByParticipant(req.userId);
+    const status = req.query.status && req.query.status !== 'all' ? req.query.status : null;
+    const { page, limit } = req.query;
+
+    const pageNum = page ? parseInt(page, 10) || 1 : null;
+    const limitNum = limit ? parseInt(limit, 10) || 10 : 10;
+
+    const result = pageNum
+      ? await Interview.findByParticipant(req.userId, status, { page: pageNum, limit: limitNum })
+      : await Interview.findByParticipant(req.userId, status);
+
+    const interviews = pageNum ? result.data : result;
+    const pagination = pageNum ? result.pagination : undefined;
 
     res.json({
       success: true,
-      data: { interviews },
+      data: { 
+        interviews: formatInterviews(interviews),
+        ...(pagination ? { pagination } : {}),
+      },
     });
   } catch (error) {
     console.error('Get participant interviews error:', error);
@@ -548,11 +631,25 @@ exports.getByOrganization = async (req, res) => {
       });
     }
 
-    const interviews = await Interview.findByOrganization(organizationId);
+    const status = req.query.status && req.query.status !== 'all' ? req.query.status : null;
+    const { page, limit } = req.query;
+
+    const pageNum = page ? parseInt(page, 10) || 1 : null;
+    const limitNum = limit ? parseInt(limit, 10) || 10 : 10;
+
+    const result = pageNum
+      ? await Interview.findByOrganization(organizationId, status, { page: pageNum, limit: limitNum })
+      : await Interview.findByOrganization(organizationId, status);
+
+    const interviews = pageNum ? result.data : result;
+    const pagination = pageNum ? result.pagination : undefined;
 
     res.json({
       success: true,
-      data: { interviews },
+      data: { 
+        interviews: formatInterviews(interviews),
+        ...(pagination ? { pagination } : {}),
+      },
     });
   } catch (error) {
     console.error('Get organization interviews error:', error);

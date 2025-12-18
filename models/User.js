@@ -129,11 +129,45 @@ class User {
   }
 
   /**
-   * Find users by type
+   * Find users by type with optional pagination
    */
-  static async findByType(userType) {
-    const query = 'SELECT * FROM users WHERE user_type = $1 ORDER BY created_at DESC';
-    const result = await pool.query(query, [userType]);
+  static async findByType(userType, options = {}) {
+    let query = 'SELECT * FROM users WHERE user_type = $1 ORDER BY created_at DESC';
+    const params = [userType];
+
+    const page = options.page && options.page > 0 ? options.page : null;
+    const limit = options.limit && options.limit > 0 ? options.limit : null;
+    let totalCount = null;
+
+    if (page && limit) {
+      const countResult = await pool.query(
+        'SELECT COUNT(*) FROM users WHERE user_type = $1',
+        [userType]
+      );
+      totalCount = parseInt(countResult.rows[0].count, 10) || 0;
+
+      const offset = (page - 1) * limit;
+      params.push(limit, offset);
+      query += ` LIMIT $2 OFFSET $3`;
+    }
+
+    const result = await pool.query(query, params);
+
+    if (page && limit) {
+      const totalPages = totalCount ? Math.ceil(totalCount / limit) : 1;
+      return {
+        data: result.rows,
+        pagination: {
+          page,
+          limit,
+          totalCount,
+          totalPages,
+          hasNext: page < totalPages,
+          hasPrev: page > 1,
+        },
+      };
+    }
+
     return result.rows;
   }
 }

@@ -114,11 +114,24 @@ exports.getByOrganization = async (req, res) => {
       });
     }
 
-    const invitations = await UserInvitation.findByOrganization(organizationId);
+    const { page, limit } = req.query;
+
+    const pageNum = page ? parseInt(page, 10) || 1 : null;
+    const limitNum = limit ? parseInt(limit, 10) || 10 : 10;
+
+    const result = pageNum
+      ? await UserInvitation.findByOrganization(organizationId, { page: pageNum, limit: limitNum })
+      : await UserInvitation.findByOrganization(organizationId);
+
+    const invitations = pageNum ? result.data : result;
+    const pagination = pageNum ? result.pagination : undefined;
 
     res.json({
       success: true,
-      data: { invitations: invitations.map(formatInvitationData) },
+      data: { 
+        invitations: invitations.map(formatInvitationData),
+        ...(pagination ? { pagination } : {}),
+      },
     });
   } catch (error) {
     console.error('Get invitations error:', error);

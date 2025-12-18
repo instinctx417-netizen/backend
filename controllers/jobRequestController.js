@@ -172,7 +172,7 @@ exports.getById = async (req, res) => {
 exports.getByOrganization = async (req, res) => {
   try {
     const { organizationId } = req.params;
-    const { status, departmentId } = req.query;
+    const { status, departmentId, page, limit } = req.query;
 
     // Verify user has access
     const userOrg = await UserOrganization.findByUserAndOrganization(req.userId, organizationId);
@@ -187,11 +187,23 @@ exports.getByOrganization = async (req, res) => {
     if (status) filters.status = status;
     if (departmentId) filters.departmentId = parseInt(departmentId);
 
-    const jobRequests = await JobRequest.findByOrganization(organizationId, filters);
+    // Optional pagination
+    const pageNum = page ? parseInt(page, 10) || 1 : null;
+    const limitNum = limit ? parseInt(limit, 10) || 10 : 10;
+
+    const result = pageNum
+      ? await JobRequest.findByOrganization(organizationId, filters, { page: pageNum, limit: limitNum })
+      : await JobRequest.findByOrganization(organizationId, filters);
+
+    const jobRequests = pageNum ? result.data : result;
+    const pagination = pageNum ? result.pagination : undefined;
 
     res.json({
       success: true,
-      data: { jobRequests },
+      data: { 
+        jobRequests,
+        ...(pagination ? { pagination } : {}),
+      },
     });
   } catch (error) {
     console.error('Get job requests error:', error);

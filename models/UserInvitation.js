@@ -59,10 +59,10 @@ class UserInvitation {
   }
 
   /**
-   * Find invitations by organization
+   * Find invitations by organization with optional pagination
    */
-  static async findByOrganization(organizationId) {
-    const query = `
+  static async findByOrganization(organizationId, options = {}) {
+    let query = `
       SELECT 
         ui.*,
         u1.first_name as invited_by_first_name,
@@ -75,15 +75,49 @@ class UserInvitation {
       WHERE ui.organization_id = $1
       ORDER BY ui.created_at DESC
     `;
-    const result = await pool.query(query, [organizationId]);
+    const params = [organizationId];
+
+    const page = options.page && options.page > 0 ? options.page : null;
+    const limit = options.limit && options.limit > 0 ? options.limit : null;
+    let totalCount = null;
+
+    if (page && limit) {
+      const countResult = await pool.query(
+        'SELECT COUNT(*) FROM user_invitations ui WHERE ui.organization_id = $1',
+        [organizationId]
+      );
+      totalCount = parseInt(countResult.rows[0].count, 10) || 0;
+
+      const offset = (page - 1) * limit;
+      params.push(limit, offset);
+      query += ` LIMIT $2 OFFSET $3`;
+    }
+
+    const result = await pool.query(query, params);
+
+    if (page && limit) {
+      const totalPages = totalCount ? Math.ceil(totalCount / limit) : 1;
+      return {
+        data: result.rows,
+        pagination: {
+          page,
+          limit,
+          totalCount,
+          totalPages,
+          hasNext: page < totalPages,
+          hasPrev: page > 1,
+        },
+      };
+    }
+
     return result.rows;
   }
 
   /**
-   * Find pending invitations
+   * Find pending invitations with optional pagination
    */
-  static async findPending() {
-    const query = `
+  static async findPending(options = {}) {
+    let query = `
       SELECT 
         ui.*,
         o.name as organization_name,
@@ -95,15 +129,48 @@ class UserInvitation {
       WHERE ui.status = 'pending' AND ui.expires_at > NOW()
       ORDER BY ui.created_at DESC
     `;
-    const result = await pool.query(query);
+    const params = [];
+
+    const page = options.page && options.page > 0 ? options.page : null;
+    const limit = options.limit && options.limit > 0 ? options.limit : null;
+    let totalCount = null;
+
+    if (page && limit) {
+      const countResult = await pool.query(
+        `SELECT COUNT(*) FROM user_invitations ui WHERE ui.status = 'pending' AND ui.expires_at > NOW()`
+      );
+      totalCount = parseInt(countResult.rows[0].count, 10) || 0;
+
+      const offset = (page - 1) * limit;
+      params.push(limit, offset);
+      query += ` LIMIT $1 OFFSET $2`;
+    }
+
+    const result = await pool.query(query, params);
+
+    if (page && limit) {
+      const totalPages = totalCount ? Math.ceil(totalCount / limit) : 1;
+      return {
+        data: result.rows,
+        pagination: {
+          page,
+          limit,
+          totalCount,
+          totalPages,
+          hasNext: page < totalPages,
+          hasPrev: page > 1,
+        },
+      };
+    }
+
     return result.rows;
   }
 
   /**
-   * Find approved invitations
+   * Find approved invitations with optional pagination
    */
-  static async findApproved() {
-    const query = `
+  static async findApproved(options = {}) {
+    let query = `
       SELECT 
         ui.*,
         o.name as organization_name,
@@ -115,7 +182,40 @@ class UserInvitation {
       WHERE ui.status = 'approved'
       ORDER BY ui.verified_at DESC, ui.created_at DESC
     `;
-    const result = await pool.query(query);
+    const params = [];
+
+    const page = options.page && options.page > 0 ? options.page : null;
+    const limit = options.limit && options.limit > 0 ? options.limit : null;
+    let totalCount = null;
+
+    if (page && limit) {
+      const countResult = await pool.query(
+        `SELECT COUNT(*) FROM user_invitations ui WHERE ui.status = 'approved'`
+      );
+      totalCount = parseInt(countResult.rows[0].count, 10) || 0;
+
+      const offset = (page - 1) * limit;
+      params.push(limit, offset);
+      query += ` LIMIT $1 OFFSET $2`;
+    }
+
+    const result = await pool.query(query, params);
+
+    if (page && limit) {
+      const totalPages = totalCount ? Math.ceil(totalCount / limit) : 1;
+      return {
+        data: result.rows,
+        pagination: {
+          page,
+          limit,
+          totalCount,
+          totalPages,
+          hasNext: page < totalPages,
+          hasPrev: page > 1,
+        },
+      };
+    }
+
     return result.rows;
   }
 

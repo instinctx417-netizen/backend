@@ -17,11 +17,23 @@ exports.getAssignedJobRequests = async (req, res) => {
       });
     }
 
-    const jobRequests = await JobRequest.findByAssignedHR(req.userId);
+    const { page, limit } = req.query;
+    const pageNum = page ? parseInt(page, 10) || 1 : null;
+    const limitNum = limit ? parseInt(limit, 10) || 10 : 10;
+
+    const result = pageNum
+      ? await JobRequest.findByAssignedHR(req.userId, { page: pageNum, limit: limitNum })
+      : await JobRequest.findByAssignedHR(req.userId);
+
+    const jobRequests = pageNum ? result.data : result;
+    const pagination = pageNum ? result.pagination : undefined;
 
     res.json({
       success: true,
-      data: { jobRequests },
+      data: { 
+        jobRequests,
+        ...(pagination ? { pagination } : {}),
+      },
     });
   } catch (error) {
     console.error('Get assigned job requests error:', error);
@@ -47,7 +59,16 @@ exports.getCandidateUsers = async (req, res) => {
       });
     }
 
-    const candidateUsers = await User.findByType('candidate');
+    const { page, limit } = req.query;
+    const pageNum = page ? parseInt(page, 10) || 1 : null;
+    const limitNum = limit ? parseInt(limit, 10) || 10 : 10;
+
+    const result = pageNum
+      ? await User.findByType('candidate', { page: pageNum, limit: limitNum })
+      : await User.findByType('candidate');
+
+    const candidateUsers = pageNum ? result.data : result;
+    const pagination = pageNum ? result.pagination : undefined;
     
     // Format candidate users
     const formatUserData = (user) => {
@@ -73,7 +94,10 @@ exports.getCandidateUsers = async (req, res) => {
 
     res.json({
       success: true,
-      data: { candidates: formattedCandidates },
+      data: { 
+        candidates: formattedCandidates,
+        ...(pagination ? { pagination } : {}),
+      },
     });
   } catch (error) {
     console.error('Get candidate users error:', error);

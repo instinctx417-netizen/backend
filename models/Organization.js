@@ -48,11 +48,42 @@ class Organization {
   }
 
   /**
-   * Get all organizations
+   * Get all organizations with optional pagination
    */
-  static async findAll() {
-    const query = 'SELECT * FROM organizations ORDER BY created_at DESC';
-    const result = await pool.query(query);
+  static async findAll(options = {}) {
+    let query = 'SELECT * FROM organizations ORDER BY created_at DESC';
+    const params = [];
+
+    const page = options.page && options.page > 0 ? options.page : null;
+    const limit = options.limit && options.limit > 0 ? options.limit : null;
+    let totalCount = null;
+
+    if (page && limit) {
+      const countResult = await pool.query('SELECT COUNT(*) FROM organizations');
+      totalCount = parseInt(countResult.rows[0].count, 10) || 0;
+
+      const offset = (page - 1) * limit;
+      params.push(limit, offset);
+      query += ` LIMIT $1 OFFSET $2`;
+    }
+
+    const result = await pool.query(query, params);
+
+    if (page && limit) {
+      const totalPages = totalCount ? Math.ceil(totalCount / limit) : 1;
+      return {
+        data: result.rows,
+        pagination: {
+          page,
+          limit,
+          totalCount,
+          totalPages,
+          hasNext: page < totalPages,
+          hasPrev: page > 1,
+        },
+      };
+    }
+
     return result.rows;
   }
 

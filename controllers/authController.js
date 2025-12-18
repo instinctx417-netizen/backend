@@ -4,6 +4,18 @@ const User = require('../models/User');
 const UserInvitation = require('../models/UserInvitation');
 const UserOrganization = require('../models/UserOrganization');
 const Organization = require('../models/Organization');
+const multer = require('multer');
+const { buildS3Key, uploadFileToS3 } = require('../utils/s3');
+
+// Multer instance for candidate file uploads (keeps files in memory to send to S3)
+const upload = multer({ storage: multer.memoryStorage() });
+
+// Expose as middleware for routes
+exports.uploadCandidateFilesMiddleware = upload.fields([
+  { name: 'profileImage', maxCount: 1 },
+  { name: 'resume', maxCount: 1 },
+  { name: 'supportingDocs', maxCount: 10 },
+]);
 const jwtConfig = require('../config/jwt');
 
 /**
@@ -77,6 +89,17 @@ const formatUserData = async (user) => {
     whyInstinctX: user.why_instinctx,
     startupExperience: user.startup_experience,
     resumePath: user.resume_path,
+    profilePicPath: user.profile_pic_path,
+    candidateDocuments:
+      user.candidate_documents_json && typeof user.candidate_documents_json === 'string'
+        ? (() => {
+            try {
+              return JSON.parse(user.candidate_documents_json);
+            } catch {
+              return user.candidate_documents_json;
+            }
+          })()
+        : user.candidate_documents_json || null,
   };
 };
 
@@ -245,6 +268,164 @@ exports.register = async (req, res) => {
       success: false,
       message: 'Internal server error',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+    });
+  }
+};
+
+/**
+ * Register a candidate with file uploads saved to S3.
+ * This is used by the public candidate application form.
+ */
+exports.registerCandidateWithFiles = async (req, res) => {
+  try {
+    // Run the same validation rules as regular registration
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        errors: errors.array(),
+      });
+    }
+
+    const {
+      email,
+      password,
+      firstName,
+      lastName,
+      userType,
+      phone,
+      // Candidate fields
+      fullName,
+      location,
+      country,
+      timezone,
+      primaryFunction,
+      yearsExperience,
+      currentRole,
+      education,
+      englishProficiency,
+      availability,
+      linkedIn,
+      portfolio,
+      whyInstinctX,
+      startupExperience,
+    } = req.body;
+
+    // This endpoint is only for candidates
+    if (userType !== 'candidate') {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid user type for this endpoint',
+      });
+    }
+
+    // Check if user already exists
+    const existingUser = await User.findByEmail(email);
+    if (existingUser) {
+      return res.status(409).json({
+        success: false,
+        message: 'User with this email already exists',
+      });
+    }
+
+    // Files from multer
+    const profileFile = req.files?.profileImage?.[0];
+    const resumeFile = req.files?.resume?.[0];
+    const supportingFiles = req.files?.supportingDocs || [];
+
+    const imageMimeTypes = ['image/png', 'image/jpeg', 'image/tiff'];
+    const docMimeTypes = ['image/png', 'image/jpeg', 'image/tiff', 'application/pdf'];
+    const maxSizeBytes = 5 * 1024 * 1024; // 5MB
+
+    // Helper to validate file
+    const validateFile = (file, allowedTypes, label) => {
+      if (!allowedTypes.includes(file.mimetype)) {
+        throw new Error(`${label} has invalid file type`);
+      }
+      if (file.size > maxSizeBytes) {
+        throw new Error(`${label} exceeds maximum size of 5MB`);
+      }
+    };
+
+    // Upload profile picture
+    let profilePicKey = null;
+    if (profileFile) {
+      validateFile(profileFile, imageMimeTypes, 'Profile picture');
+      const key = buildS3Key('profile-pics', profileFile.originalname);
+      await uploadFileToS3(profileFile.buffer, key, profileFile.mimetype);
+      profilePicKey = key;
+    }
+
+    // Upload resume
+    let resumeKey = null;
+    if (resumeFile) {
+      validateFile(resumeFile, docMimeTypes, 'Resume');
+      const key = buildS3Key('resumes', resumeFile.originalname);
+      await uploadFileToS3(resumeFile.buffer, key, resumeFile.mimetype);
+      resumeKey = key;
+    }
+
+    // Upload other documents
+    const candidateDocKeys = [];
+    for (const file of supportingFiles) {
+      validateFile(file, docMimeTypes, 'Supporting document');
+      const key = buildS3Key('candidate-documents', file.originalname);
+      await uploadFileToS3(file.buffer, key, file.mimetype);
+      candidateDocKeys.push(key);
+    }
+
+    // Create user as candidate, saving the resume key path
+    const candidateDocumentsJson = candidateDocKeys.length > 0 ? candidateDocKeys : null;
+
+    const user = await User.create({
+      email,
+      password,
+      firstName,
+      lastName,
+      userType: 'candidate',
+      phone,
+      // Candidate fields
+      fullName,
+      location,
+      country,
+      timezone,
+      primaryFunction,
+      yearsExperience,
+      currentRole,
+      education,
+      englishProficiency,
+      availability,
+      linkedIn,
+      portfolio,
+      whyInstinctX,
+      startupExperience,
+      // Store resume path (existing column)
+      resumePath: resumeKey,
+      // New S3-backed fields
+      profilePicPath: profilePicKey,
+      candidateDocumentsJson,
+    });
+
+    // Format user data
+    const formattedUser = await formatUserData(user);
+
+    // For candidates, we don't log them in; account is for office use only
+    return res.status(201).json({
+      success: true,
+      message: 'Candidate registered successfully',
+      data: {
+        user: formattedUser,
+        // No token returned
+        profilePicKey,
+        resumeKey,
+        candidateDocKeys,
+      },
+    });
+  } catch (error) {
+    console.error('Candidate registration with files error:', error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Internal server error',
     });
   }
 };

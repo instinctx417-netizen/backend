@@ -14,7 +14,8 @@ class User {
       // Candidate fields
       fullName, location, country, timezone, primaryFunction, yearsExperience,
       currentRole, education, englishProficiency, availability,
-      linkedIn, portfolio, whyInstinctX, startupExperience, resumePath
+      linkedIn, portfolio, whyInstinctX, startupExperience, resumePath,
+      profilePicPath, candidateDocumentsJson,
     } = userData;
     
     // Hash password
@@ -32,6 +33,7 @@ class User {
         full_name, location, country, timezone, primary_function, years_experience,
         "current_role", education, english_proficiency, availability,
         linkedin_url, portfolio_url, why_instinctx, startup_experience, resume_path,
+        profile_pic_path, candidate_documents_json,
         created_at, updated_at
       )
       VALUES (
@@ -41,6 +43,7 @@ class User {
         $17, $18, $19, $20, $21, $22,
         $23, $24, $25, $26,
         $27, $28, $29, $30, $31,
+        $32, $33,
         NOW(), NOW()
       )
       RETURNING *
@@ -55,7 +58,9 @@ class User {
       hireType || null, engagementType || null, timeline || null, jobFunctionsJson, specificNeeds || null, heardFrom || null,
       fullName || null, location || null, country || null, timezone || null, primaryFunction || null, yearsExperience || null,
       currentRole || null, education || null, englishProficiency || null, availability || null,
-      linkedIn || null, portfolio || null, whyInstinctX || null, startupExperience || null, resumePath || null
+      linkedIn || null, portfolio || null, whyInstinctX || null, startupExperience || null, resumePath || null,
+      profilePicPath || null,
+      candidateDocumentsJson ? JSON.stringify(candidateDocumentsJson) : null,
     ];
     
     const result = await pool.query(query, values);

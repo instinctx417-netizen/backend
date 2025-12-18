@@ -2,6 +2,7 @@ const Candidate = require('../models/Candidate');
 const JobRequest = require('../models/JobRequest');
 const UserOrganization = require('../models/UserOrganization');
 const Notification = require('../models/Notification');
+const User = require('../models/User');
 
 /**
  * Get candidates for a job request
@@ -139,6 +140,80 @@ exports.updateStatus = async (req, res) => {
   }
 };
 
+/**
+ * Get detailed candidate user profile (admin & HR only)
+ * Uses data from the users table (candidate signup), not the candidates table.
+ */
+exports.getCandidateUserDetails = async (req, res) => {
+  try {
+    const { id } = req.params;
 
+    const viewer = await User.findById(req.userId);
+    if (!viewer || !['admin', 'hr'].includes(viewer.user_type)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only admins and HR users can view candidate profiles',
+      });
+    }
 
+    const candidateUser = await User.findById(id);
+    if (!candidateUser || candidateUser.user_type !== 'candidate') {
+      return res.status(404).json({
+        success: false,
+        message: 'Candidate user not found',
+      });
+    }
 
+    let candidateDocuments = null;
+    if (candidateUser.candidate_documents_json) {
+      try {
+        candidateDocuments =
+          typeof candidateUser.candidate_documents_json === 'string'
+            ? JSON.parse(candidateUser.candidate_documents_json)
+            : candidateUser.candidate_documents_json;
+      } catch {
+        candidateDocuments = candidateUser.candidate_documents_json;
+      }
+    }
+
+    const formatted = {
+      id: candidateUser.id,
+      email: candidateUser.email,
+      firstName: candidateUser.first_name,
+      lastName: candidateUser.last_name,
+      fullName: candidateUser.full_name,
+      phone: candidateUser.phone,
+      userType: candidateUser.user_type,
+      location: candidateUser.location,
+      country: candidateUser.country,
+      timezone: candidateUser.timezone,
+      primaryFunction: candidateUser.primary_function,
+      yearsExperience: candidateUser.years_experience,
+      currentRole: candidateUser.current_role,
+      education: candidateUser.education,
+      englishProficiency: candidateUser.english_proficiency,
+      availability: candidateUser.availability,
+      linkedIn: candidateUser.linkedin_url,
+      portfolio: candidateUser.portfolio_url,
+      whyInstinctX: candidateUser.why_instinctx,
+      startupExperience: candidateUser.startup_experience,
+      resumePath: candidateUser.resume_path,
+      profilePicPath: candidateUser.profile_pic_path,
+      candidateDocuments,
+      createdAt: candidateUser.created_at,
+      updatedAt: candidateUser.updated_at,
+    };
+
+    res.json({
+      success: true,
+      data: { candidate: formatted },
+    });
+  } catch (error) {
+    console.error('Get candidate user details error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+    });
+  }
+};

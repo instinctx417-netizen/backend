@@ -40,6 +40,8 @@ router.put('/job-requests/:id', jobRequestController.update);
 router.get('/job-requests/:jobRequestId/candidates', candidateController.getByJobRequest);
 router.get('/candidates/:id', candidateController.getById);
 router.put('/candidates/:id/status', candidateController.updateStatus);
+// Candidate user profile (admin & HR only, shared endpoint)
+router.get('/candidate-users/:id', candidateController.getCandidateUserDetails);
 
 // Interview routes
 router.post('/interviews', interviewController.create);

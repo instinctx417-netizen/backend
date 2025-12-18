@@ -49,6 +49,12 @@ async function runMigrations() {
     await pool.query(sql7);
     console.log('✅ Migration 007 completed: department_id removed from user_invitations and user_organizations');
 
+    // Run migration 008
+    const migration8 = path.join(__dirname, '..', 'migrations', '008_add_candidate_file_fields.sql');
+    const sql8 = fs.readFileSync(migration8, 'utf8');
+    await pool.query(sql8);
+    console.log('✅ Migration 008 completed: candidate file path fields added');
+
     console.log('✅ All migrations completed successfully');
   } catch (error) {
     console.error('❌ Migration failed:', error);

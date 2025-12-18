@@ -12,6 +12,18 @@ const { registerValidation, loginValidation } = require('../middleware/validatio
 router.post('/register', registerValidation, authController.register);
 
 /**
+ * @route   POST /api/auth/register-candidate
+ * @desc    Register a candidate with file uploads (profile pic, resume, documents)
+ * @access  Public
+ */
+router.post(
+  '/register-candidate',
+  authController.uploadCandidateFilesMiddleware,
+  registerValidation,
+  authController.registerCandidateWithFiles
+);
+
+/**
  * @route   POST /api/auth/login
  * @desc    Login user
  * @access  Public

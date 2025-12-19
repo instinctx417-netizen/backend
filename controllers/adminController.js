@@ -698,17 +698,22 @@ exports.activateOrganization = async (req, res) => {
       });
     }
 
-    // Notify all users in the organization
+    // Notify only COO users in the organization
     try {
       const orgUsers = await UserOrganization.findByOrganization(parseInt(organizationId));
       if (orgUsers && orgUsers.length > 0) {
-        const userIds = orgUsers.map(uo => uo.user_id);
-        await notifyOrganizationActivated(
-          req,
-          userIds,
-          parseInt(organizationId),
-          organization.name || organization.organization_name
-        );
+        // Filter only COO role users
+        const cooUserIds = orgUsers
+          .filter(uo => uo.role === 'coo')
+          .map(uo => uo.user_id);
+        if (cooUserIds.length > 0) {
+          await notifyOrganizationActivated(
+            req,
+            cooUserIds,
+            parseInt(organizationId),
+            organization.name || organization.organization_name
+          );
+        }
       }
     } catch (notifError) {
       console.error('Error sending activation notifications:', notifError);
@@ -758,17 +763,22 @@ exports.deactivateOrganization = async (req, res) => {
       });
     }
 
-    // Notify all users in the organization
+    // Notify only COO users in the organization
     try {
       const orgUsers = await UserOrganization.findByOrganization(parseInt(organizationId));
       if (orgUsers && orgUsers.length > 0) {
-        const userIds = orgUsers.map(uo => uo.user_id);
-        await notifyOrganizationDeactivated(
-          req,
-          userIds,
-          parseInt(organizationId),
-          organization.name || organization.organization_name
-        );
+        // Filter only COO role users
+        const cooUserIds = orgUsers
+          .filter(uo => uo.role === 'coo')
+          .map(uo => uo.user_id);
+        if (cooUserIds.length > 0) {
+          await notifyOrganizationDeactivated(
+            req,
+            cooUserIds,
+            parseInt(organizationId),
+            organization.name || organization.organization_name
+          );
+        }
       }
     } catch (notifError) {
       console.error('Error sending deactivation notifications:', notifError);

@@ -5,7 +5,9 @@
  */
 
 const Notification = require('../models/Notification');
+const User = require('../models/User');
 const { emitNotificationToUser, emitUnreadCountUpdate } = require('./socket');
+const emailService = require('./emailService');
 
 /**
  * Create a notification and emit real-time event
@@ -68,8 +70,8 @@ const NotificationHelpers = {
   /**
    * Notify about job request assignment
    */
-  async notifyJobRequestAssigned(req, hrUserId, jobRequestId, jobRequestTitle) {
-    return createNotification(req, {
+  async notifyJobRequestAssigned(req, hrUserId, jobRequestId, jobRequestTitle, organizationName, departmentName) {
+    const notification = await createNotification(req, {
       userId: hrUserId,
       type: 'job_request_assigned',
       title: 'Job Request Assigned',
@@ -77,13 +79,33 @@ const NotificationHelpers = {
       relatedEntityType: 'job_request',
       relatedEntityId: jobRequestId,
     });
+
+    // Send email notification
+    try {
+      const hrUser = await User.findById(hrUserId);
+      if (hrUser && hrUser.email) {
+        await emailService.sendJobRequestAssignedEmail(
+          hrUser.email,
+          `${hrUser.first_name} ${hrUser.last_name}`,
+          jobRequestTitle,
+          organizationName || '',
+          departmentName || '',
+          jobRequestId
+        );
+      }
+    } catch (emailError) {
+      console.error('Error sending job request assigned email:', emailError);
+      // Don't fail notification if email fails
+    }
+
+    return notification;
   },
 
   /**
    * Notify about candidate delivery
    */
   async notifyCandidatesDelivered(req, userId, jobRequestId, jobRequestTitle, count) {
-    return createNotification(req, {
+    const notification = await createNotification(req, {
       userId,
       type: 'candidates_delivered',
       title: 'New Candidates Ready for Review',
@@ -91,6 +113,26 @@ const NotificationHelpers = {
       relatedEntityType: 'job_request',
       relatedEntityId: jobRequestId,
     });
+
+    // Send email notification
+    try {
+      const user = await User.findById(userId);
+      if (user && user.email) {
+        await emailService.sendCandidatesDeliveredEmail(
+          user.email,
+          `${user.first_name} ${user.last_name}`,
+          jobRequestTitle,
+          count,
+          jobRequestId,
+          user.user_type
+        );
+      }
+    } catch (emailError) {
+      console.error('Error sending candidates delivered email:', emailError);
+      // Don't fail notification if email fails
+    }
+
+    return notification;
   },
 
   /**
@@ -108,70 +150,172 @@ const NotificationHelpers = {
   },
 
   /**
-   * Notify organization users about activation
+   * Notify organization COO users about activation
    */
-  async notifyOrganizationActivated(req, userIds, organizationId, organizationName) {
-    return createNotificationsForUsers(req, userIds, {
+  async notifyOrganizationActivated(req, cooUserIds, organizationId, organizationName) {
+    if (!cooUserIds || cooUserIds.length === 0) {
+      return [];
+    }
+
+    const notifications = await createNotificationsForUsers(req, cooUserIds, {
       type: 'organization_activated',
       title: 'Organization Activated',
       message: `Your organization "${organizationName}" has been activated. You can now access all features.`,
       relatedEntityType: 'organization',
       relatedEntityId: organizationId,
     });
+
+    // Send email notifications
+    try {
+      for (const userId of cooUserIds) {
+        const user = await User.findById(userId);
+        if (user && user.email) {
+          await emailService.sendOrganizationActivatedEmail(
+            user.email,
+            `${user.first_name} ${user.last_name}`,
+            organizationName,
+            user.user_type
+          );
+        }
+      }
+    } catch (emailError) {
+      console.error('Error sending organization activated emails:', emailError);
+      // Don't fail notifications if email fails
+    }
+
+    return notifications;
   },
 
   /**
-   * Notify organization users about deactivation
+   * Notify organization COO users about deactivation
    */
-  async notifyOrganizationDeactivated(req, userIds, organizationId, organizationName) {
-    return createNotificationsForUsers(req, userIds, {
+  async notifyOrganizationDeactivated(req, cooUserIds, organizationId, organizationName) {
+    if (!cooUserIds || cooUserIds.length === 0) {
+      return [];
+    }
+
+    const notifications = await createNotificationsForUsers(req, cooUserIds, {
       type: 'organization_deactivated',
       title: 'Organization Deactivated',
       message: `Your organization "${organizationName}" has been deactivated. Please contact support for assistance.`,
       relatedEntityType: 'organization',
       relatedEntityId: organizationId,
     });
+
+    // Send email notifications
+    try {
+      for (const userId of cooUserIds) {
+        const user = await User.findById(userId);
+        if (user && user.email) {
+          await emailService.sendOrganizationDeactivatedEmail(
+            user.email,
+            `${user.first_name} ${user.last_name}`,
+            organizationName
+          );
+        }
+      }
+    } catch (emailError) {
+      console.error('Error sending organization deactivated emails:', emailError);
+      // Don't fail notifications if email fails
+    }
+
+    return notifications;
   },
 
   /**
    * Notify about invitation sent
    */
-  async notifyInvitationSent(req, adminUserIds, invitationId, email, organizationName) {
-    return createNotificationsForUsers(req, adminUserIds, {
+  async notifyInvitationSent(req, adminUserIds, invitationId, email, organizationName, invitedRole) {
+    const notifications = await createNotificationsForUsers(req, adminUserIds, {
       type: 'invitation_sent',
       title: 'New Invitation Requires Approval',
       message: `An invitation has been sent to ${email} for organization "${organizationName}". Please review and approve.`,
       relatedEntityType: 'invitation',
       relatedEntityId: invitationId,
     });
+
+    // Send email notifications to admins
+    try {
+      for (const adminId of adminUserIds) {
+        const admin = await User.findById(adminId);
+        if (admin && admin.email) {
+          await emailService.sendInvitationSentEmail(
+            admin.email,
+            `${admin.first_name} ${admin.last_name}`,
+            email,
+            invitedRole || 'user'
+          );
+        }
+      }
+    } catch (emailError) {
+      console.error('Error sending invitation sent emails:', emailError);
+      // Don't fail notifications if email fails
+    }
+
+    return notifications;
   },
 
   /**
    * Notify about invitation approved
    */
-  async notifyInvitationApproved(req, invitedByUserId, invitationId, email) {
-    return createNotification(req, {
-      userId: invitedByUserId,
+  async notifyInvitationApproved(req, invitedUserId, invitationId, organizationName, signupLink) {
+    const notification = await createNotification(req, {
+      userId: invitedUserId,
       type: 'invitation_approved',
       title: 'Invitation Approved',
-      message: `The invitation sent to ${email} has been approved by admin.`,
+      message: `Your invitation to join ${organizationName} has been approved. You can now sign up.`,
       relatedEntityType: 'invitation',
       relatedEntityId: invitationId,
     });
+
+    // Send email notification
+    try {
+      const user = await User.findById(invitedUserId);
+      if (user && user.email) {
+        await emailService.sendInvitationApprovedEmail(
+          user.email,
+          `${user.first_name} ${user.last_name}`,
+          organizationName,
+          signupLink
+        );
+      }
+    } catch (emailError) {
+      console.error('Error sending invitation approved email:', emailError);
+      // Don't fail notification if email fails
+    }
+
+    return notification;
   },
 
   /**
    * Notify about invitation rejected
    */
-  async notifyInvitationRejected(req, invitedByUserId, invitationId, email) {
-    return createNotification(req, {
-      userId: invitedByUserId,
+  async notifyInvitationRejected(req, invitedUserId, invitationId, organizationName) {
+    const notification = await createNotification(req, {
+      userId: invitedUserId,
       type: 'invitation_rejected',
       title: 'Invitation Rejected',
-      message: `The invitation sent to ${email} has been rejected by admin.`,
+      message: `Your invitation to join ${organizationName} has been rejected. Please contact support.`,
       relatedEntityType: 'invitation',
       relatedEntityId: invitationId,
     });
+
+    // Send email notification
+    try {
+      const user = await User.findById(invitedUserId);
+      if (user && user.email) {
+        await emailService.sendInvitationRejectedEmail(
+          user.email,
+          `${user.first_name} ${user.last_name}`,
+          organizationName
+        );
+      }
+    } catch (emailError) {
+      console.error('Error sending invitation rejected email:', emailError);
+      // Don't fail notification if email fails
+    }
+
+    return notification;
   },
 
   /**
@@ -191,14 +335,36 @@ const NotificationHelpers = {
   /**
    * Notify admins about new job request
    */
-  async notifyJobRequestCreated(req, adminUserIds, jobRequestId, jobRequestTitle, organizationName) {
-    return createNotificationsForUsers(req, adminUserIds, {
+  async notifyJobRequestCreated(req, adminUserIds, jobRequestId, jobRequestTitle, organizationName, departmentName) {
+    const notifications = await createNotificationsForUsers(req, adminUserIds, {
       type: 'job_request_received',
       title: 'New Job Request',
       message: `A new job request "${jobRequestTitle}" has been created for "${organizationName}". Please assign HR.`,
       relatedEntityType: 'job_request',
       relatedEntityId: jobRequestId,
     });
+
+    // Send email notifications
+    try {
+      for (const adminId of adminUserIds) {
+        const admin = await User.findById(adminId);
+        if (admin && admin.email) {
+          await emailService.sendJobRequestCreatedEmail(
+            admin.email,
+            `${admin.first_name} ${admin.last_name}`,
+            jobRequestTitle,
+            organizationName,
+            departmentName || '',
+            jobRequestId
+          );
+        }
+      }
+    } catch (emailError) {
+      console.error('Error sending job request created emails:', emailError);
+      // Don't fail notifications if email fails
+    }
+
+    return notifications;
   },
 
   /**
@@ -217,14 +383,37 @@ const NotificationHelpers = {
   /**
    * Notify about candidate selection
    */
-  async notifyCandidateSelected(req, userIds, candidateId, candidateName, jobRequestId, jobRequestTitle) {
-    return createNotificationsForUsers(req, userIds, {
+  async notifyCandidateSelected(req, userIds, candidateId, candidateName, jobRequestId, jobRequestTitle, status) {
+    const notifications = await createNotificationsForUsers(req, userIds, {
       type: 'candidate_selected',
-      title: 'Candidate Selected',
-      message: `${candidateName} has been selected for job request "${jobRequestTitle}".`,
+      title: 'Candidate Status Update',
+      message: `Candidate "${candidateName}" for "${jobRequestTitle}" has been marked as "${status}".`,
       relatedEntityType: 'candidate',
       relatedEntityId: candidateId,
     });
+
+    // Send email notifications
+    try {
+      for (const userId of userIds) {
+        const user = await User.findById(userId);
+        if (user && user.email) {
+          await emailService.sendCandidateSelectedEmail(
+            user.email,
+            `${user.first_name} ${user.last_name}`,
+            candidateName,
+            jobRequestTitle,
+            status,
+            jobRequestId,
+            user.user_type
+          );
+        }
+      }
+    } catch (emailError) {
+      console.error('Error sending candidate selected emails:', emailError);
+      // Don't fail notifications if email fails
+    }
+
+    return notifications;
   },
 
   /**

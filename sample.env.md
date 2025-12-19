@@ -24,3 +24,12 @@ AWS_ACCESS_KEY_ID=YOUR_AWS_ACCESS_KEY_ID-
 AWS_SECRET_ACCESS_KEY=YOUR_AWS_SECRET_ACCESS_KEY-
 AWS_REGION=us-east-1
 S3_BUCKET_UPLOADS=instinctx-uploads
+
+# AWS Email (SES)
+AWS_SES_REGION=us-east-1
+AWS_SES_SMTP_HOST=email-smtp.us-east-1.amazonaws.com
+AWS_SES_SMTP_PORT=587
+AWS_SES_SMTP_USERNAME=<your-smtp-username>
+AWS_SES_SMTP_PASSWORD=<your-smtp-password>
+EMAIL_FROM=info@instinctxai.com
+EMAIL_FROM_NAME=InstinctX

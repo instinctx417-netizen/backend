@@ -1,20 +1,36 @@
 const Notification = require('../models/Notification');
+const { emitNotificationUpdate, emitUnreadCountUpdate } = require('../utils/socket');
 
 /**
  * Get user notifications
  */
 exports.getUserNotifications = async (req, res) => {
   try {
-    const { unreadOnly, limit } = req.query;
+    const { unreadOnly, limit, page } = req.query;
 
-    const notifications = await Notification.findByUser(req.userId, {
-      unreadOnly: unreadOnly === 'true',
-      limit: limit ? parseInt(limit) : undefined
-    });
+    const pageNum = page ? parseInt(page, 10) || 1 : null;
+    const limitNum = limit ? parseInt(limit, 10) || 10 : 10;
+
+    const result = pageNum
+      ? await Notification.findByUser(req.userId, {
+          unreadOnly: unreadOnly === 'true',
+          page: pageNum,
+          limit: limitNum,
+        })
+      : await Notification.findByUser(req.userId, {
+          unreadOnly: unreadOnly === 'true',
+          limit: limitNum,
+        });
+
+    const notifications = pageNum ? result.data : result;
+    const pagination = pageNum ? result.pagination : undefined;
 
     res.json({
       success: true,
-      data: { notifications },
+      data: {
+        notifications,
+        ...(pagination ? { pagination } : {}),
+      },
     });
   } catch (error) {
     console.error('Get notifications error:', error);
@@ -48,6 +64,66 @@ exports.getUnreadCount = async (req, res) => {
 };
 
 /**
+ * Create a new notification
+ */
+exports.create = async (req, res) => {
+  try {
+    const { userId, type, title, message, relatedEntityType, relatedEntityId } = req.body;
+
+    // Verify user has permission (admin/HR can create notifications for others)
+    const user = await require('../models/User').findById(req.userId);
+    if (!user || !['admin', 'hr'].includes(user.user_type)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only admins and HR can create notifications',
+      });
+    }
+
+    const notification = await Notification.create({
+      userId,
+      type,
+      title,
+      message,
+      relatedEntityType,
+      relatedEntityId,
+    });
+
+    // Emit real-time event
+    const io = req.app.get('io');
+    if (io) {
+      const { emitNotificationToUser, emitUnreadCountUpdate } = require('../utils/socket');
+      emitNotificationToUser(io, userId, {
+        id: notification.id,
+        userId: notification.user_id,
+        type: notification.type,
+        title: notification.title,
+        message: notification.message,
+        relatedEntityType: notification.related_entity_type,
+        relatedEntityId: notification.related_entity_id,
+        read: notification.read || false,
+        createdAt: notification.created_at,
+      });
+
+      const unreadCount = await Notification.getUnreadCount(userId);
+      emitUnreadCountUpdate(io, userId, unreadCount);
+    }
+
+    res.status(201).json({
+      success: true,
+      message: 'Notification created',
+      data: { notification },
+    });
+  } catch (error) {
+    console.error('Create notification error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+    });
+  }
+};
+
+/**
  * Mark notification as read
  */
 exports.markAsRead = async (req, res) => {
@@ -60,6 +136,18 @@ exports.markAsRead = async (req, res) => {
         success: false,
         message: 'Notification not found',
       });
+    }
+
+    // Emit real-time update
+    const io = req.app.get('io');
+    if (io) {
+      emitNotificationUpdate(io, req.userId, {
+        id: parseInt(id),
+        read: true,
+      });
+
+      const unreadCount = await Notification.getUnreadCount(req.userId);
+      emitUnreadCountUpdate(io, req.userId, unreadCount);
     }
 
     res.json({
@@ -84,6 +172,21 @@ exports.markAllAsRead = async (req, res) => {
   try {
     const notifications = await Notification.markAllAsRead(req.userId);
 
+    // Emit real-time update
+    const io = req.app.get('io');
+    if (io) {
+      // Emit update for each notification
+      notifications.forEach((notif) => {
+        emitNotificationUpdate(io, req.userId, {
+          id: notif.id,
+          read: true,
+        });
+      });
+
+      const unreadCount = await Notification.getUnreadCount(req.userId);
+      emitUnreadCountUpdate(io, req.userId, unreadCount);
+    }
+
     res.json({
       success: true,
       message: 'All notifications marked as read',
@@ -99,34 +202,6 @@ exports.markAllAsRead = async (req, res) => {
   }
 };
 
-/**
- * Delete notification
- */
-exports.delete = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const notification = await Notification.delete(id, req.userId);
-
-    if (!notification) {
-      return res.status(404).json({
-        success: false,
-        message: 'Notification not found',
-      });
-    }
-
-    res.json({
-      success: true,
-      message: 'Notification deleted successfully',
-    });
-  } catch (error) {
-    console.error('Delete notification error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Internal server error',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
-    });
-  }
-};
 
 
 

@@ -228,6 +228,25 @@ exports.register = async (req, res) => {
 
       // Mark invitation as accepted
       await UserInvitation.accept(invitationToken);
+
+      // Notify the user who sent the invitation
+      try {
+        const Organization = require('../models/Organization');
+        const { notifyInvitationAccepted } = require('../utils/notificationService');
+        if (invitation.invited_by_user_id) {
+          const organization = await Organization.findById(invitation.organization_id);
+          await notifyInvitationAccepted(
+            req,
+            invitation.invited_by_user_id,
+            invitation.id,
+            invitation.email,
+            organization?.name || 'organization'
+          );
+        }
+      } catch (notifError) {
+        console.error('Error sending invitation acceptance notification:', notifError);
+        // Don't fail the request if notification fails
+      }
     } else if (finalUserType === 'client') {
       // Auto-create organization for client users during regular registration
       const organizationName = companyName;

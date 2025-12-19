@@ -75,7 +75,7 @@ class Notification {
   }
 
   /**
-   * Find notifications by user
+   * Find notifications by user with optional pagination
    */
   static async findByUser(userId, options = {}) {
     let query = 'SELECT * FROM notifications WHERE user_id = $1';
@@ -86,15 +86,56 @@ class Notification {
       query += ' AND read = false';
     }
 
+    const page = options.page && options.page > 0 ? options.page : null;
+    const limit = options.limit && options.limit > 0 ? options.limit : null;
+    let totalCount = null;
+
+    // Get total count if pagination is requested
+    if (page && limit) {
+      let countQuery = 'SELECT COUNT(*) FROM notifications WHERE user_id = $1';
+      const countParams = [userId];
+      
+      if (options.unreadOnly) {
+        countQuery += ' AND read = false';
+      }
+      
+      const countResult = await pool.query(countQuery, countParams);
+      totalCount = parseInt(countResult.rows[0].count, 10) || 0;
+    }
+
     query += ' ORDER BY created_at DESC';
 
-    if (options.limit) {
+    if (page && limit) {
+      const offset = (page - 1) * limit;
+      paramCount++;
+      query += ` LIMIT $${paramCount}`;
+      params.push(limit);
+      paramCount++;
+      query += ` OFFSET $${paramCount}`;
+      params.push(offset);
+    } else if (options.limit) {
       paramCount++;
       query += ` LIMIT $${paramCount}`;
       params.push(options.limit);
     }
 
     const result = await pool.query(query, params);
+
+    if (page && limit) {
+      const totalPages = totalCount ? Math.ceil(totalCount / limit) : 1;
+      return {
+        data: result.rows,
+        pagination: {
+          page,
+          limit,
+          totalCount,
+          totalPages,
+          hasNext: page < totalPages,
+          hasPrev: page > 1,
+        },
+      };
+    }
+
     return result.rows;
   }
 
@@ -139,18 +180,6 @@ class Notification {
     return parseInt(result.rows[0].count);
   }
 
-  /**
-   * Delete notification
-   */
-  static async delete(id, userId) {
-    const query = `
-      DELETE FROM notifications 
-      WHERE id = $1 AND user_id = $2
-      RETURNING id
-    `;
-    const result = await pool.query(query, [id, userId]);
-    return result.rows[0];
-  }
 }
 
 module.exports = Notification;

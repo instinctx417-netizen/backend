@@ -139,14 +139,13 @@ exports.create = async (req, res) => {
     // Create notifications
     // Notify candidate (if they have a user account)
     if (candidate.user_id) {
-      await Notification.create({
-        userId: candidate.user_id,
-        type: 'interview_scheduled',
-        title: 'Interview Scheduled',
-        message: `You have an interview scheduled for ${jobRequest.title}`,
-        relatedEntityType: 'interview',
-        relatedEntityId: interview.id
-      });
+      const { notifyInterviewScheduled } = require('../utils/notificationService');
+      await notifyInterviewScheduled(
+        req,
+        candidate.user_id,
+        interview.id,
+        jobRequest.title
+      );
     }
 
     // Notify participants
@@ -379,6 +378,38 @@ exports.update = async (req, res) => {
 
     const updated = await Interview.update(id, req.body);
 
+    // Notify participants about interview update or cancellation
+    try {
+      const { notifyInterviewUpdated, notifyInterviewCancelled } = require('../utils/notificationService');
+      const InterviewParticipant = require('../models/InterviewParticipant');
+      const participants = await InterviewParticipant.findByInterview(id);
+      
+      if (participants && participants.length > 0) {
+        const userIds = participants.map(p => p.user_id);
+        const interviewTitle = updated.job_title || interview.job_title || 'Interview';
+        
+        // Check if interview was cancelled
+        if (updated.status === 'cancelled' || req.body.status === 'cancelled') {
+          await notifyInterviewCancelled(
+            req,
+            userIds,
+            parseInt(id),
+            interviewTitle
+          );
+        } else {
+          await notifyInterviewUpdated(
+            req,
+            userIds,
+            parseInt(id),
+            interviewTitle
+          );
+        }
+      }
+    } catch (notifError) {
+      console.error('Error sending interview notification:', notifError);
+      // Don't fail the request if notification fails
+    }
+
     res.json({
       success: true,
       message: 'Interview updated successfully',
@@ -425,14 +456,13 @@ exports.addParticipant = async (req, res) => {
     const participant = await Interview.addParticipant(id, userId, role || 'attendee');
 
     // Create notification
-    await Notification.create({
+    const { notifyInterviewScheduled } = require('../utils/notificationService');
+    await notifyInterviewScheduled(
+      req,
       userId,
-      type: 'interview_scheduled',
-      title: 'Interview Invitation',
-      message: `You have been invited to an interview for ${interview.job_title}`,
-      relatedEntityType: 'interview',
-      relatedEntityId: id
-    });
+      id,
+      interview.job_title
+    );
 
     res.json({
       success: true,

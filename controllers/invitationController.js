@@ -80,8 +80,29 @@ exports.create = async (req, res) => {
       role
     });
 
-    // Create notification for admins (they need to verify)
-    // Note: In production, query for admin users and notify them
+    // Notify admins about new invitation
+    try {
+      const User = require('../models/User');
+      const Organization = require('../models/Organization');
+      const { notifyInvitationSent } = require('../utils/notificationService');
+      
+      // Get all admin users
+      const adminUsers = await User.findByType('admin');
+      if (adminUsers && adminUsers.length > 0) {
+        const adminUserIds = adminUsers.map(admin => admin.id);
+        const organization = await Organization.findById(organizationId);
+        await notifyInvitationSent(
+          req,
+          adminUserIds,
+          invitation.id,
+          email,
+          organization?.name || 'organization'
+        );
+      }
+    } catch (notifError) {
+      console.error('Error sending invitation notification:', notifError);
+      // Don't fail the request if notification fails
+    }
 
     res.status(201).json({
       success: true,

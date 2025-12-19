@@ -175,6 +175,22 @@ exports.approveInvitation = async (req, res) => {
       });
     }
 
+    // Notify the user who sent the invitation
+    try {
+      const { notifyInvitationApproved } = require('../utils/notificationService');
+      if (invitation.invited_by_user_id) {
+        await notifyInvitationApproved(
+          req,
+          invitation.invited_by_user_id,
+          invitation.id,
+          invitation.email
+        );
+      }
+    } catch (notifError) {
+      console.error('Error sending approval notification:', notifError);
+      // Don't fail the request if notification fails
+    }
+
     // Format invitation data
     const formattedInvitation = {
       id: invitation.id,
@@ -224,6 +240,22 @@ exports.rejectInvitation = async (req, res) => {
         success: false,
         message: 'Invitation not found or already processed',
       });
+    }
+
+    // Notify the user who sent the invitation
+    try {
+      const { notifyInvitationRejected } = require('../utils/notificationService');
+      if (invitation.invited_by_user_id) {
+        await notifyInvitationRejected(
+          req,
+          invitation.invited_by_user_id,
+          invitation.id,
+          invitation.email
+        );
+      }
+    } catch (notifError) {
+      console.error('Error sending rejection notification:', notifError);
+      // Don't fail the request if notification fails
     }
 
     res.json({
@@ -385,6 +417,20 @@ exports.assignHrToJobRequest = async (req, res) => {
         success: false,
         message: 'Job request not found',
       });
+    }
+
+    // Notify HR user about assignment
+    try {
+      const { notifyJobRequestAssigned } = require('../utils/notificationService');
+      await notifyJobRequestAssigned(
+        req,
+        hrUserId,
+        parseInt(jobRequestId),
+        jobRequest.title || jobRequest.job_title
+      );
+    } catch (notifError) {
+      console.error('Error sending job request assignment notification:', notifError);
+      // Don't fail the request if notification fails
     }
 
     res.json({
@@ -640,6 +686,8 @@ exports.activateOrganization = async (req, res) => {
 
     const { organizationId } = req.params;
     const Organization = require('../models/Organization');
+    const UserOrganization = require('../models/UserOrganization');
+    const { notifyOrganizationActivated } = require('../utils/notificationService');
     
     const organization = await Organization.activate(parseInt(organizationId));
     
@@ -648,6 +696,23 @@ exports.activateOrganization = async (req, res) => {
         success: false,
         message: 'Organization not found',
       });
+    }
+
+    // Notify all users in the organization
+    try {
+      const orgUsers = await UserOrganization.findByOrganization(parseInt(organizationId));
+      if (orgUsers && orgUsers.length > 0) {
+        const userIds = orgUsers.map(uo => uo.user_id);
+        await notifyOrganizationActivated(
+          req,
+          userIds,
+          parseInt(organizationId),
+          organization.name || organization.organization_name
+        );
+      }
+    } catch (notifError) {
+      console.error('Error sending activation notifications:', notifError);
+      // Don't fail the request if notification fails
     }
 
     res.json({
@@ -681,6 +746,8 @@ exports.deactivateOrganization = async (req, res) => {
 
     const { organizationId } = req.params;
     const Organization = require('../models/Organization');
+    const UserOrganization = require('../models/UserOrganization');
+    const { notifyOrganizationDeactivated } = require('../utils/notificationService');
     
     const organization = await Organization.deactivate(parseInt(organizationId));
     
@@ -689,6 +756,23 @@ exports.deactivateOrganization = async (req, res) => {
         success: false,
         message: 'Organization not found',
       });
+    }
+
+    // Notify all users in the organization
+    try {
+      const orgUsers = await UserOrganization.findByOrganization(parseInt(organizationId));
+      if (orgUsers && orgUsers.length > 0) {
+        const userIds = orgUsers.map(uo => uo.user_id);
+        await notifyOrganizationDeactivated(
+          req,
+          userIds,
+          parseInt(organizationId),
+          organization.name || organization.organization_name
+        );
+      }
+    } catch (notifError) {
+      console.error('Error sending deactivation notifications:', notifError);
+      // Don't fail the request if notification fails
     }
 
     res.json({

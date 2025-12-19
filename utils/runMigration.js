@@ -55,6 +55,12 @@ async function runMigrations() {
     await pool.query(sql8);
     console.log('✅ Migration 008 completed: candidate file path fields added');
 
+    // Run migration 009
+    const migration9 = path.join(__dirname, '..', 'migrations', '009_add_notification_types.sql');
+    const sql9 = fs.readFileSync(migration9, 'utf8');
+    await pool.query(sql9);
+    console.log('✅ Migration 009 completed: notification types added');
+
     console.log('✅ All migrations completed successfully');
   } catch (error) {
     console.error('❌ Migration failed:', error);

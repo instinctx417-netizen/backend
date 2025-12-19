@@ -59,11 +59,11 @@ router.post('/organizations/:organizationId/invitations', invitationController.c
 router.get('/organizations/:organizationId/invitations', invitationController.getByOrganization);
 
 // Notification routes
+router.post('/notifications', notificationController.create);
 router.get('/notifications', notificationController.getUserNotifications);
 router.get('/notifications/unread-count', notificationController.getUnreadCount);
 router.put('/notifications/:id/read', notificationController.markAsRead);
 router.put('/notifications/read-all', notificationController.markAllAsRead);
-router.delete('/notifications/:id', notificationController.delete);
 
 // Dashboard routes
 router.get('/organizations/:organizationId/dashboard/departments', dashboardController.getDepartmentStatusDashboard);

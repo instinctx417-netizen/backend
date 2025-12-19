@@ -41,10 +41,29 @@ exports.create = async (req, res) => {
       priority
     });
 
-    // Create notification for admins
-    // Note: In production, query for admin users (user_type = 'admin' or specific admin role)
-    // For now, we'll create a notification that can be picked up by admin dashboard
-    // The admin dashboard should query for notifications with type 'job_request_received'
+    // Notify admins about new job request
+    try {
+      const User = require('../models/User');
+      const Organization = require('../models/Organization');
+      const { notifyJobRequestCreated } = require('../utils/notificationService');
+      
+      // Get all admin users
+      const adminUsers = await User.findByType('admin');
+      if (adminUsers && adminUsers.length > 0) {
+        const adminUserIds = adminUsers.map(admin => admin.id);
+        const organization = await Organization.findById(organizationId);
+        await notifyJobRequestCreated(
+          req,
+          adminUserIds,
+          jobRequest.id,
+          title,
+          organization?.name || 'organization'
+        );
+      }
+    } catch (notifError) {
+      console.error('Error sending job request notification:', notifError);
+      // Don't fail the request if notification fails
+    }
 
     res.status(201).json({
       success: true,
@@ -265,6 +284,31 @@ exports.update = async (req, res) => {
     }
 
     const updated = await JobRequest.update(id, req.body);
+
+    // Notify relevant users about job request update
+    try {
+      const UserOrganization = require('../models/UserOrganization');
+      const { notifyJobRequestUpdated } = require('../utils/notificationService');
+      
+      // Get all users in the organization
+      const orgUsers = await UserOrganization.findByOrganization(jobRequest.organization_id);
+      if (orgUsers && orgUsers.length > 0) {
+        const userIds = orgUsers.map(uo => uo.user_id);
+        // Also notify assigned HR if exists
+        if (updated.assigned_to_hr_user_id && !userIds.includes(updated.assigned_to_hr_user_id)) {
+          userIds.push(updated.assigned_to_hr_user_id);
+        }
+        await notifyJobRequestUpdated(
+          req,
+          userIds,
+          parseInt(id),
+          updated.title || updated.job_title
+        );
+      }
+    } catch (notifError) {
+      console.error('Error sending job request update notification:', notifError);
+      // Don't fail the request if notification fails
+    }
 
     res.json({
       success: true,

@@ -214,14 +214,14 @@ exports.pushCandidates = async (req, res) => {
 
     // Create notification for hiring manager
     if (jobRequest.hiring_manager_user_id) {
-      await Notification.create({
-        userId: jobRequest.hiring_manager_user_id,
-        type: 'candidates_delivered',
-        title: 'New Candidates Ready for Review',
-        message: `${createdCandidates.length} new candidate(s) have been delivered for ${jobRequest.title}`,
-        relatedEntityType: 'job_request',
-        relatedEntityId: jobRequestId,
-      });
+      const { notifyCandidatesDelivered } = require('../utils/notificationService');
+      await notifyCandidatesDelivered(
+        req,
+        jobRequest.hiring_manager_user_id,
+        jobRequestId,
+        jobRequest.title,
+        createdCandidates.length
+      );
     }
 
     res.status(201).json({

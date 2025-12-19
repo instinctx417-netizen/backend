@@ -125,6 +125,36 @@ exports.updateStatus = async (req, res) => {
 
     const updated = await Candidate.updateStatus(id, status);
 
+    // Notify about candidate selection
+    if (status === 'selected') {
+      try {
+        const UserOrganization = require('../models/UserOrganization');
+        const { notifyCandidateSelected } = require('../utils/notificationService');
+        
+        // Get all users in the organization
+        const orgUsers = await UserOrganization.findByOrganization(jobRequest.organization_id);
+        if (orgUsers && orgUsers.length > 0) {
+          const userIds = orgUsers.map(uo => uo.user_id);
+          // Also notify assigned HR if exists
+          if (jobRequest.assigned_to_hr_user_id && !userIds.includes(jobRequest.assigned_to_hr_user_id)) {
+            userIds.push(jobRequest.assigned_to_hr_user_id);
+          }
+          const candidateName = updated.candidate_name || updated.name || 'Candidate';
+          await notifyCandidateSelected(
+            req,
+            userIds,
+            parseInt(id),
+            candidateName,
+            jobRequest.id,
+            jobRequest.title || jobRequest.job_title
+          );
+        }
+      } catch (notifError) {
+        console.error('Error sending candidate selection notification:', notifError);
+        // Don't fail the request if notification fails
+      }
+    }
+
     res.json({
       success: true,
       message: 'Candidate status updated successfully',

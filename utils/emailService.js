@@ -22,6 +22,9 @@ const EMAIL_FROM = process.env.EMAIL_FROM || 'noreply@instinctx.com';
 const EMAIL_FROM_NAME = process.env.EMAIL_FROM_NAME || 'InstinctX';
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 
+// Email sending enabled/disabled flag (default: true for production, set to false for testing)
+const ENABLE_EMAILS = process.env.ENABLE_EMAILS !== 'false' && process.env.ENABLE_EMAILS !== '0';
+
 // Create reusable transporter
 let transporter = null;
 
@@ -73,6 +76,12 @@ function loadTemplate(templateName, variables = {}) {
  * @returns {Promise<Object>} - Send result
  */
 async function sendEmail({ to, subject, html, text }) {
+  // Check if email sending is disabled
+  if (!ENABLE_EMAILS) {
+    console.log(`[EMAIL DISABLED - ENV] Would send email to: ${Array.isArray(to) ? to.join(', ') : to}, Subject: ${subject}`);
+    return { success: true, messageId: 'disabled', skipped: true };
+  }
+
   try {
     const mailOptions = {
       from: `"${EMAIL_FROM_NAME}" <${EMAIL_FROM}>`,

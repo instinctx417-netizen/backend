@@ -102,40 +102,6 @@ const NotificationHelpers = {
   },
 
   /**
-   * Notify about candidate delivery
-   */
-  async notifyCandidatesDelivered(req, userId, jobRequestId, jobRequestTitle, count) {
-    const notification = await createNotification(req, {
-      userId,
-      type: 'candidates_delivered',
-      title: 'New Candidates Ready for Review',
-      message: `${count} new candidate(s) have been delivered for ${jobRequestTitle}`,
-      relatedEntityType: 'job_request',
-      relatedEntityId: jobRequestId,
-    });
-
-    // Send email notification
-    try {
-      const user = await User.findById(userId);
-      if (user && user.email) {
-        await emailService.sendCandidatesDeliveredEmail(
-          user.email,
-          `${user.first_name} ${user.last_name}`,
-          jobRequestTitle,
-          count,
-          jobRequestId,
-          user.user_type
-        );
-      }
-    } catch (emailError) {
-      console.error('Error sending candidates delivered email:', emailError);
-      // Don't fail notification if email fails
-    }
-
-    return notification;
-  },
-
-  /**
    * Notify about interview scheduled
    */
   async notifyInterviewScheduled(req, userId, interviewId, interviewTitle) {

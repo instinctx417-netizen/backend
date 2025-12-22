@@ -31,7 +31,26 @@ exports.getByJobRequest = async (req, res) => {
       });
     }
 
-    const candidates = await Candidate.findByJobRequest(jobRequestId);
+    const candidatesRaw = await Candidate.findByJobRequest(jobRequestId);
+
+    // Format candidates - convert snake_case to camelCase
+    const candidates = candidatesRaw.map(candidate => ({
+      id: candidate.id,
+      jobRequestId: candidate.job_request_id,
+      userId: candidate.user_id || null,
+      name: candidate.name,
+      email: candidate.email || null,
+      phone: candidate.phone || null,
+      linkedinUrl: candidate.linkedin_url || null,
+      portfolioUrl: candidate.portfolio_url || null,
+      resumePath: candidate.resume_path || null,
+      profileSummary: candidate.profile_summary || null,
+      status: candidate.status,
+      deliveredAt: candidate.delivered_at,
+      viewedAt: candidate.viewed_at || null,
+      interviewCount: parseInt(candidate.interview_count) || 0,
+      lastInterviewDate: candidate.last_interview_date || null,
+    }));
 
     res.json({
       success: true,
@@ -78,11 +97,32 @@ exports.getById = async (req, res) => {
     // Mark as viewed if not already
     if (candidate.status === 'delivered') {
       await Candidate.updateStatus(id, 'viewed');
+      // Reload candidate to get updated status
+      candidate = await Candidate.findById(id);
     }
+
+    // Format candidate - convert snake_case to camelCase
+    const formattedCandidate = {
+      id: candidate.id,
+      jobRequestId: candidate.job_request_id,
+      userId: candidate.user_id || null,
+      name: candidate.name,
+      email: candidate.email || null,
+      phone: candidate.phone || null,
+      linkedinUrl: candidate.linkedin_url || null,
+      portfolioUrl: candidate.portfolio_url || null,
+      resumePath: candidate.resume_path || null,
+      profileSummary: candidate.profile_summary || null,
+      status: candidate.status,
+      deliveredAt: candidate.delivered_at,
+      viewedAt: candidate.viewed_at || null,
+      interviewCount: parseInt(candidate.interview_count) || 0,
+      lastInterviewDate: candidate.last_interview_date || null,
+    };
 
     res.json({
       success: true,
-      data: { candidate },
+      data: { candidate: formattedCandidate },
     });
   } catch (error) {
     console.error('Get candidate error:', error);
@@ -171,7 +211,7 @@ exports.updateStatus = async (req, res) => {
 };
 
 /**
- * Get detailed candidate user profile (admin & HR only)
+ * Get detailed candidate user profile (admin, HR, and client users)
  * Uses data from the users table (candidate signup), not the candidates table.
  */
 exports.getCandidateUserDetails = async (req, res) => {
@@ -179,10 +219,10 @@ exports.getCandidateUserDetails = async (req, res) => {
     const { id } = req.params;
 
     const viewer = await User.findById(req.userId);
-    if (!viewer || !['admin', 'hr'].includes(viewer.user_type)) {
+    if (!viewer || !['admin', 'hr', 'client'].includes(viewer.user_type)) {
       return res.status(403).json({
         success: false,
-        message: 'Only admins and HR users can view candidate profiles',
+        message: 'You do not have permission to view candidate profiles',
       });
     }
 

@@ -61,6 +61,18 @@ async function runMigrations() {
     await pool.query(sql9);
     console.log('✅ Migration 009 completed: notification types added');
 
+    // Run migration 010
+    const migration10 = path.join(__dirname, '..', 'migrations', '010_create_interview_logs.sql');
+    const sql10 = fs.readFileSync(migration10, 'utf8');
+    await pool.query(sql10);
+    console.log('✅ Migration 010 completed: interview_logs table created');
+
+    // Run migration 011
+    const migration11 = path.join(__dirname, '..', 'migrations', '011_create_invitation_logs.sql');
+    const sql11 = fs.readFileSync(migration11, 'utf8');
+    await pool.query(sql11);
+    console.log('✅ Migration 011 completed: invitation_logs table created');
+
     console.log('✅ All migrations completed successfully');
   } catch (error) {
     console.error('❌ Migration failed:', error);

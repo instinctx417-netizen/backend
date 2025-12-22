@@ -12,6 +12,8 @@ const notificationController = require('../controllers/notificationController');
 const adminController = require('../controllers/adminController');
 const analyticsController = require('../controllers/analyticsController');
 const dashboardController = require('../controllers/dashboardController');
+const interviewLogController = require('../controllers/interviewLogController');
+const invitationLogController = require('../controllers/invitationLogController');
 
 // Public routes (no authentication required)
 // Get invitation by token (for signup page - users are not logged in yet)
@@ -100,6 +102,10 @@ router.get('/hr/candidates', hrController.getCandidateUsers);
 router.post('/hr/job-requests/:jobRequestId/candidates', hrController.pushCandidates);
 router.get('/hr/dashboard/stats', hrController.getDashboardStats);
 router.get('/hr/interviews', interviewController.getByAssignedHR);
+
+// Log routes (admin only)
+router.get('/admin/interview-logs', interviewLogController.getInterviewLogs);
+router.get('/admin/invitation-logs', invitationLogController.getInvitationLogs);
 
 module.exports = router;
 

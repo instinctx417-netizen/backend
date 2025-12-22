@@ -3,6 +3,8 @@ const Candidate = require('../models/Candidate');
 const JobRequest = require('../models/JobRequest');
 const UserOrganization = require('../models/UserOrganization');
 const Notification = require('../models/Notification');
+const InterviewLog = require('../models/InterviewLog');
+const User = require('../models/User');
 
 /**
  * Format interview data to camelCase
@@ -20,6 +22,7 @@ function formatInterview(interview) {
     id: interview.id,
     jobRequestId: interview.job_request_id || interview.jobRequestId,
     candidateId: interview.candidate_id || interview.candidateId,
+    candidateUserId: interview.candidate_user_id || interview.candidateUserId,
     scheduledByUserId: interview.scheduled_by_user_id || interview.scheduledByUserId,
     scheduled_at: scheduled_at,
     durationMinutes: interview.duration_minutes || interview.durationMinutes,
@@ -135,6 +138,33 @@ exports.create = async (req, res) => {
 
     // Update job request status
     await JobRequest.update(jobRequestId, { status: 'interviews_scheduled' });
+
+    // Log interview creation
+    try {
+      const user = await User.findById(req.userId);
+      await InterviewLog.create({
+        interviewId: interview.id,
+        actionType: 'created',
+        performedByUserId: req.userId,
+        performedByUserType: user?.user_type || null,
+        performedByUserName: user ? `${user.first_name} ${user.last_name}` : null,
+        newValue: {
+          scheduledAt: formattedScheduledAt,
+          durationMinutes: durationMinutes || 60,
+          meetingLink,
+          meetingPlatform,
+          status: 'scheduled'
+        },
+        details: {
+          candidateId,
+          jobRequestId,
+          participantCount: participantUserIds ? participantUserIds.length + 1 : 1
+        }
+      });
+    } catch (logError) {
+      console.error('Error logging interview creation:', logError);
+      // Don't fail the request if logging fails
+    }
 
     // Create notifications
     // Notify candidate (if they have a user account)
@@ -364,19 +394,100 @@ exports.update = async (req, res) => {
       });
     }
 
-    // Verify user has access
-    const userOrg = await UserOrganization.findByUserAndOrganization(
-      req.userId,
-      interview.organization_id
-    );
-    if (!userOrg) {
+    // Check user type and access
+    const User = require('../models/User');
+    const user = await User.findById(req.userId);
+    
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: 'User not found',
+      });
+    }
+
+    let hasAccess = false;
+
+    // Admin users have access to all interviews
+    if (user.user_type === 'admin') {
+      hasAccess = true;
+    }
+    // HR users have access if the interview's job request is assigned to them
+    else if (user.user_type === 'hr') {
+      const jobRequest = await JobRequest.findById(interview.job_request_id);
+      hasAccess = jobRequest && jobRequest.assigned_to_hr_user_id === parseInt(req.userId);
+    }
+    // Client users have access if they belong to the organization
+    else {
+      const userOrg = await UserOrganization.findByUserAndOrganization(
+        req.userId,
+        interview.organization_id
+      );
+      hasAccess = !!userOrg;
+    }
+
+    if (!hasAccess) {
       return res.status(403).json({
         success: false,
         message: 'You do not have access to this interview',
       });
     }
 
+    // Track old values for logging
+    const oldValues = {};
+    if (req.body.status && interview.status !== req.body.status) {
+      oldValues.status = interview.status;
+    }
+    if (req.body.scheduled_at && interview.scheduled_at !== req.body.scheduled_at) {
+      oldValues.scheduled_at = interview.scheduled_at;
+    }
+    if (req.body.meetingLink && interview.meeting_link !== req.body.meetingLink) {
+      oldValues.meetingLink = interview.meeting_link;
+    }
+    if (req.body.meetingPlatform && interview.meeting_platform !== req.body.meetingPlatform) {
+      oldValues.meetingPlatform = interview.meeting_platform;
+    }
+
     const updated = await Interview.update(id, req.body);
+
+    // Log interview update
+    try {
+      const user = await User.findById(req.userId);
+      const newValues = {};
+      if (req.body.status) newValues.status = req.body.status;
+      if (req.body.scheduled_at) newValues.scheduled_at = req.body.scheduled_at;
+      if (req.body.meetingLink) newValues.meetingLink = req.body.meetingLink;
+      if (req.body.meetingPlatform) newValues.meetingPlatform = req.body.meetingPlatform;
+      if (req.body.durationMinutes) newValues.durationMinutes = req.body.durationMinutes;
+      if (req.body.notes !== undefined) newValues.notes = req.body.notes;
+
+      let actionType = 'updated';
+      if (req.body.status === 'cancelled' && interview.status !== 'cancelled') {
+        actionType = 'cancelled';
+      } else if (req.body.status === 'completed' && interview.status !== 'completed') {
+        actionType = 'completed';
+      } else if (req.body.status && interview.status !== req.body.status) {
+        actionType = 'status_changed';
+      } else if (req.body.scheduled_at && interview.scheduled_at !== req.body.scheduled_at) {
+        actionType = 'rescheduled';
+      }
+
+      await InterviewLog.create({
+        interviewId: parseInt(id),
+        actionType,
+        performedByUserId: req.userId,
+        performedByUserType: user?.user_type || null,
+        performedByUserName: user ? `${user.first_name} ${user.last_name}` : null,
+        oldValue: Object.keys(oldValues).length > 0 ? oldValues : null,
+        newValue: Object.keys(newValues).length > 0 ? newValues : null,
+        details: actionType === 'rescheduled' ? {
+          oldScheduledAt: interview.scheduled_at,
+          newScheduledAt: req.body.scheduled_at
+        } : null
+      });
+    } catch (logError) {
+      console.error('Error logging interview update:', logError);
+      // Don't fail the request if logging fails
+    }
 
     // Notify participants about interview update or cancellation
     try {
@@ -455,6 +566,28 @@ exports.addParticipant = async (req, res) => {
 
     const participant = await Interview.addParticipant(id, userId, role || 'attendee');
 
+    // Log participant addition
+    try {
+      const user = await User.findById(req.userId);
+      const participantUser = await User.findById(userId);
+      await InterviewLog.create({
+        interviewId: parseInt(id),
+        actionType: 'participant_added',
+        performedByUserId: req.userId,
+        performedByUserType: user?.user_type || null,
+        performedByUserName: user ? `${user.first_name} ${user.last_name}` : null,
+        details: {
+          participantUserId: userId,
+          participantUserName: participantUser ? `${participantUser.first_name} ${participantUser.last_name}` : null,
+          participantEmail: participantUser?.email || null,
+          role: role || 'attendee'
+        }
+      });
+    } catch (logError) {
+      console.error('Error logging participant addition:', logError);
+      // Don't fail the request if logging fails
+    }
+
     // Create notification
     const { notifyInterviewScheduled } = require('../utils/notificationService');
     await notifyInterviewScheduled(
@@ -507,6 +640,27 @@ exports.removeParticipant = async (req, res) => {
     }
 
     await Interview.removeParticipant(id, userId);
+
+    // Log participant removal
+    try {
+      const user = await User.findById(req.userId);
+      const participantUser = await User.findById(userId);
+      await InterviewLog.create({
+        interviewId: parseInt(id),
+        actionType: 'participant_removed',
+        performedByUserId: req.userId,
+        performedByUserType: user?.user_type || null,
+        performedByUserName: user ? `${user.first_name} ${user.last_name}` : null,
+        details: {
+          participantUserId: userId,
+          participantUserName: participantUser ? `${participantUser.first_name} ${participantUser.last_name}` : null,
+          participantEmail: participantUser?.email || null
+        }
+      });
+    } catch (logError) {
+      console.error('Error logging participant removal:', logError);
+      // Don't fail the request if logging fails
+    }
 
     res.json({
       success: true,

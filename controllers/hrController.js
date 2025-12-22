@@ -2,6 +2,7 @@ const JobRequest = require('../models/JobRequest');
 const Candidate = require('../models/Candidate');
 const User = require('../models/User');
 const Notification = require('../models/Notification');
+const UserOrganization = require('../models/UserOrganization');
 
 /**
  * Get job requests assigned to HR user
@@ -212,16 +213,45 @@ exports.pushCandidates = async (req, res) => {
       });
     }
 
-    // Create notification for hiring manager
-    if (jobRequest.hiring_manager_user_id) {
-      const { notifyCandidatesDelivered } = require('../utils/notificationService');
-      await notifyCandidatesDelivered(
-        req,
-        jobRequest.hiring_manager_user_id,
-        jobRequestId,
-        jobRequest.title,
-        createdCandidates.length
-      );
+    // Get organization users with COO and HR COO roles
+    const orgUsers = await UserOrganization.findByOrganization(jobRequest.organization_id);
+    const cooAndHrCooUserIds = orgUsers
+      .filter(orgUser => orgUser.role === 'coo')
+      .map(orgUser => orgUser.user_id);
+
+    // Send notifications to all COO and HR COO users
+    if (cooAndHrCooUserIds.length > 0) {
+      const { createNotificationsForUsers } = require('../utils/notificationService');
+      const { sendCandidatesDeliveredEmail } = require('../utils/emailService');
+      
+      // Create notifications for all COO/HR COO users
+      await createNotificationsForUsers(req, cooAndHrCooUserIds, {
+        type: 'candidates_delivered',
+        title: 'New Candidates Ready for Review',
+        message: `${createdCandidates.length} new candidates ready for review.`,
+        relatedEntityType: 'job_request',
+        relatedEntityId: jobRequestId,
+      });
+
+      // Send email notifications
+      try {
+        for (const userId of cooAndHrCooUserIds) {
+          const user = await User.findById(userId);
+          if (user && user.email) {
+            await sendCandidatesDeliveredEmail(
+              user.email,
+              `${user.first_name} ${user.last_name}`,
+              jobRequest.title,
+              createdCandidates.length,
+              jobRequestId,
+              user.user_type
+            );
+          }
+        }
+      } catch (emailError) {
+        console.error('Error sending candidates delivered emails:', emailError);
+        // Don't fail if email fails
+      }
     }
 
     res.status(201).json({

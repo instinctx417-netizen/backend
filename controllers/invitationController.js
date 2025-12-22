@@ -2,6 +2,7 @@ const UserInvitation = require('../models/UserInvitation');
 const UserOrganization = require('../models/UserOrganization');
 const User = require('../models/User');
 const Notification = require('../models/Notification');
+const InvitationLog = require('../models/InvitationLog');
 
 /**
  * Format invitation data for response (convert snake_case to camelCase)
@@ -79,6 +80,26 @@ exports.create = async (req, res) => {
       email,
       role
     });
+
+    // Log invitation creation
+    try {
+      const user = await User.findById(req.userId);
+      await InvitationLog.create({
+        invitationId: invitation.id,
+        actionType: 'created',
+        performedByUserId: req.userId,
+        performedByUserType: user?.user_type || null,
+        performedByUserName: user ? `${user.first_name} ${user.last_name}` : null,
+        email,
+        organizationId,
+        details: {
+          role
+        }
+      });
+    } catch (logError) {
+      console.error('Error logging invitation creation:', logError);
+      // Don't fail the request if logging fails
+    }
 
     // Notify admins about new invitation
     try {
@@ -181,10 +202,48 @@ exports.getByToken = async (req, res) => {
 
     // Check if expired
     if (new Date(invitation.expires_at) < new Date()) {
+      // Log expired invitation access
+      try {
+        await InvitationLog.create({
+          invitationId: invitation.id,
+          actionType: 'expired',
+          performedByUserId: null,
+          performedByUserType: null,
+          performedByUserName: null,
+          email: invitation.email,
+          organizationId: invitation.organization_id,
+          details: {
+            expiresAt: invitation.expires_at
+          }
+        });
+      } catch (logError) {
+        console.error('Error logging expired invitation access:', logError);
+      }
+
       return res.status(400).json({
         success: false,
         message: 'Invitation has expired',
       });
+    }
+
+    // Log invitation link access
+    try {
+      const ipAddress = req.ip || req.connection.remoteAddress || null;
+      await InvitationLog.create({
+        invitationId: invitation.id,
+        actionType: 'link_accessed',
+        performedByUserId: null,
+        performedByUserType: null,
+        performedByUserName: null,
+        email: invitation.email,
+        organizationId: invitation.organization_id,
+        details: {
+          ipAddress
+        }
+      });
+    } catch (logError) {
+      console.error('Error logging invitation link access:', logError);
+      // Don't fail the request if logging fails
     }
 
     res.json({

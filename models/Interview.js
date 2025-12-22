@@ -51,6 +51,7 @@ class Interview {
         jr.organization_id,
         c.name as candidate_name,
         c.email as candidate_email,
+        c.user_id as candidate_user_id,
         u.first_name as scheduled_by_first_name,
         u.last_name as scheduled_by_last_name
       FROM interviews i
@@ -73,6 +74,7 @@ class Interview {
         c.name as candidate_name,
         c.email as candidate_email,
         c.status as candidate_status,
+        c.user_id as candidate_user_id,
         u.first_name as scheduled_by_first_name,
         u.last_name as scheduled_by_last_name
       FROM interviews i
@@ -114,7 +116,8 @@ class Interview {
         jr.department_id,
         d.name as department_name,
         c.name as candidate_name,
-        c.email as candidate_email
+        c.email as candidate_email,
+        c.user_id as candidate_user_id
       FROM interviews i
       JOIN job_requests jr ON jr.id = i.job_request_id
       LEFT JOIN departments d ON d.id = jr.department_id
@@ -223,6 +226,7 @@ class Interview {
         o.name as organization_name,
         c.name as candidate_name,
         c.email as candidate_email,
+        c.user_id as candidate_user_id,
         u.first_name as scheduled_by_first_name,
         u.last_name as scheduled_by_last_name
       FROM interviews i
@@ -304,6 +308,7 @@ class Interview {
         o.name as organization_name,
         c.name as candidate_name,
         c.email as candidate_email,
+        c.user_id as candidate_user_id,
         u.first_name as scheduled_by_first_name,
         u.last_name as scheduled_by_last_name
       FROM interviews i
@@ -385,6 +390,7 @@ class Interview {
         d.name as department_name,
         c.name as candidate_name,
         c.email as candidate_email,
+        c.user_id as candidate_user_id,
         u.first_name as scheduled_by_first_name,
         u.last_name as scheduled_by_last_name
       FROM interviews i

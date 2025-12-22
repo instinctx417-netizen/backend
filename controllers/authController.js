@@ -4,6 +4,7 @@ const User = require('../models/User');
 const UserInvitation = require('../models/UserInvitation');
 const UserOrganization = require('../models/UserOrganization');
 const Organization = require('../models/Organization');
+const InvitationLog = require('../models/InvitationLog');
 const multer = require('multer');
 const { buildS3Key, uploadFileToS3 } = require('../utils/s3');
 
@@ -228,6 +229,26 @@ exports.register = async (req, res) => {
 
       // Mark invitation as accepted
       await UserInvitation.accept(invitationToken);
+
+      // Log invitation acceptance
+      try {
+        await InvitationLog.create({
+          invitationId: invitation.id,
+          actionType: 'accepted',
+          performedByUserId: user.id,
+          performedByUserType: user.user_type || null,
+          performedByUserName: `${user.first_name} ${user.last_name}`,
+          email: invitation.email,
+          organizationId: invitation.organization_id,
+          details: {
+            role: invitation.role,
+            userId: user.id
+          }
+        });
+      } catch (logError) {
+        console.error('Error logging invitation acceptance:', logError);
+        // Don't fail the request if logging fails
+      }
 
       // Notify the user who sent the invitation
       try {

@@ -33,3 +33,6 @@ AWS_SES_SMTP_USERNAME=<your-smtp-username>
 AWS_SES_SMTP_PASSWORD=<your-smtp-password>
 EMAIL_FROM=info@instinctxai.com
 EMAIL_FROM_NAME=InstinctX
+
+# true/false (true: emails enabled)
+ENABLE_EMAILS=true

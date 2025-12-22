@@ -1,6 +1,7 @@
 const User = require('../models/User');
 const UserInvitation = require('../models/UserInvitation');
 const Notification = require('../models/Notification');
+const InvitationLog = require('../models/InvitationLog');
 const bcrypt = require('bcryptjs');
 
 /**
@@ -175,6 +176,26 @@ exports.approveInvitation = async (req, res) => {
       });
     }
 
+    // Log invitation approval
+    try {
+      const admin = await User.findById(req.userId);
+      await InvitationLog.create({
+        invitationId: parseInt(invitationId),
+        actionType: 'approved',
+        performedByUserId: req.userId,
+        performedByUserType: admin?.user_type || null,
+        performedByUserName: admin ? `${admin.first_name} ${admin.last_name}` : null,
+        email: invitation.email,
+        organizationId: invitation.organization_id,
+        details: {
+          role: invitation.role
+        }
+      });
+    } catch (logError) {
+      console.error('Error logging invitation approval:', logError);
+      // Don't fail the request if logging fails
+    }
+
     // Notify the user who sent the invitation
     try {
       const { notifyInvitationApproved } = require('../utils/notificationService');
@@ -240,6 +261,26 @@ exports.rejectInvitation = async (req, res) => {
         success: false,
         message: 'Invitation not found or already processed',
       });
+    }
+
+    // Log invitation rejection
+    try {
+      const admin = await User.findById(req.userId);
+      await InvitationLog.create({
+        invitationId: parseInt(invitationId),
+        actionType: 'rejected',
+        performedByUserId: req.userId,
+        performedByUserType: admin?.user_type || null,
+        performedByUserName: admin ? `${admin.first_name} ${admin.last_name}` : null,
+        email: invitation.email,
+        organizationId: invitation.organization_id,
+        details: {
+          role: invitation.role
+        }
+      });
+    } catch (logError) {
+      console.error('Error logging invitation rejection:', logError);
+      // Don't fail the request if logging fails
     }
 
     // Notify the user who sent the invitation

@@ -133,8 +133,27 @@ exports.getById = async (req, res) => {
     }
 
     // Get candidates for this job request
-    const candidates = await Candidate.findByJobRequest(id);
+    const candidatesRaw = await Candidate.findByJobRequest(id);
     const interviewsRaw = await Interview.findByJobRequest(id);
+
+    // Format candidates - convert snake_case to camelCase
+    const candidates = candidatesRaw.map(candidate => ({
+      id: candidate.id,
+      jobRequestId: candidate.job_request_id,
+      userId: candidate.user_id || null,
+      name: candidate.name,
+      email: candidate.email || null,
+      phone: candidate.phone || null,
+      linkedinUrl: candidate.linkedin_url || null,
+      portfolioUrl: candidate.portfolio_url || null,
+      resumePath: candidate.resume_path || null,
+      profileSummary: candidate.profile_summary || null,
+      status: candidate.status,
+      deliveredAt: candidate.delivered_at,
+      viewedAt: candidate.viewed_at || null,
+      interviewCount: parseInt(candidate.interview_count) || 0,
+      lastInterviewDate: candidate.last_interview_date || null,
+    }));
 
     // Format interviews - keep snake_case for scheduled_at
     const interviews = interviewsRaw.map(interview => {

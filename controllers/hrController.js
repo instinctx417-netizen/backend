@@ -48,6 +48,7 @@ exports.getAssignedJobRequests = async (req, res) => {
 
 /**
  * Get all registered candidate users (HR and Admin only)
+ * Excludes candidates who have been hired (have active site_staff records)
  */
 exports.getCandidateUsers = async (req, res) => {
   try {
@@ -64,13 +65,56 @@ exports.getCandidateUsers = async (req, res) => {
     const pageNum = page ? parseInt(page, 10) || 1 : null;
     const limitNum = limit ? parseInt(limit, 10) || 10 : 10;
 
-    const result = pageNum
-      ? await User.findByType('candidate', { page: pageNum, limit: limitNum })
-      : await User.findByType('candidate');
+    const pool = require('../config/database');
+    const SiteStaff = require('../models/SiteStaff');
 
-    const candidateUsers = pageNum ? result.data : result;
-    const pagination = pageNum ? result.pagination : undefined;
+    // Get all hired user IDs (active site staff)
+    const hiredStaffQuery = `SELECT DISTINCT user_id FROM site_staff WHERE status = 'active'`;
+    const hiredStaffResult = await pool.query(hiredStaffQuery);
+    const hiredUserIds = hiredStaffResult.rows.map(row => row.user_id);
+
+    // Build query to exclude hired candidates
+    let query = `
+      SELECT u.* 
+      FROM users u
+      WHERE u.user_type = 'candidate'
+    `;
+    const params = [];
     
+    if (hiredUserIds.length > 0) {
+      query += ` AND u.id NOT IN (${hiredUserIds.map((_, i) => `$${i + 1}`).join(', ')})`;
+      params.push(...hiredUserIds);
+    }
+    
+    query += ' ORDER BY u.created_at DESC';
+
+    // Handle pagination
+    let totalCount = null;
+    if (pageNum && limitNum) {
+      // Build count query without ORDER BY
+      let countQuery = `
+        SELECT COUNT(*) as count
+        FROM users u
+        WHERE u.user_type = 'candidate'
+      `;
+      const countParams = [];
+      
+      if (hiredUserIds.length > 0) {
+        countQuery += ` AND u.id NOT IN (${hiredUserIds.map((_, i) => `$${i + 1}`).join(', ')})`;
+        countParams.push(...hiredUserIds);
+      }
+      
+      const countResult = await pool.query(countQuery, countParams);
+      totalCount = parseInt(countResult.rows[0].count, 10) || 0;
+
+      const offset = (pageNum - 1) * limitNum;
+      query += ` LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+      params.push(limitNum, offset);
+    }
+
+    const result = await pool.query(query, params);
+    const candidateUsers = result.rows;
+
     // Format candidate users
     const formatUserData = (user) => {
       return {
@@ -92,6 +136,19 @@ exports.getCandidateUsers = async (req, res) => {
       };
     };
     const formattedCandidates = candidateUsers.map(u => formatUserData(u));
+
+    let pagination = undefined;
+    if (pageNum && limitNum && totalCount !== null) {
+      const totalPages = Math.ceil(totalCount / limitNum);
+      pagination = {
+        page: pageNum,
+        limit: limitNum,
+        totalCount,
+        totalPages,
+        hasNext: pageNum < totalPages,
+        hasPrev: pageNum > 1,
+      };
+    }
 
     res.json({
       success: true,

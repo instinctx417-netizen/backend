@@ -188,3 +188,4 @@ class InvitationLog {
 
 module.exports = InvitationLog;
 
+

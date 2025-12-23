@@ -20,23 +20,30 @@ async function createNotification(req, notificationData) {
   const notification = await Notification.create(notificationData);
 
   // Emit real-time event if Socket.io is available
-  const io = req.app.get('io');
-  if (io) {
-    emitNotificationToUser(io, notificationData.userId, {
-      id: notification.id,
-      userId: notification.user_id,
-      type: notification.type,
-      title: notification.title,
-      message: notification.message,
-      relatedEntityType: notification.related_entity_type,
-      relatedEntityId: notification.related_entity_id,
-      read: notification.read || false,
-      createdAt: notification.created_at,
-    });
+  try {
+    const io = req?.app?.get('io');
+    if (io) {
+      emitNotificationToUser(io, notificationData.userId, {
+        id: notification.id,
+        userId: notification.user_id,
+        type: notification.type,
+        title: notification.title,
+        message: notification.message,
+        relatedEntityType: notification.related_entity_type,
+        relatedEntityId: notification.related_entity_id,
+        read: notification.read || false,
+        createdAt: notification.created_at,
+      });
 
-    // Update unread count
-    const unreadCount = await Notification.getUnreadCount(notificationData.userId);
-    emitUnreadCountUpdate(io, notificationData.userId, unreadCount);
+      // Update unread count
+      const unreadCount = await Notification.getUnreadCount(notificationData.userId);
+      emitUnreadCountUpdate(io, notificationData.userId, unreadCount);
+    } else {
+      console.warn('Socket.io instance not available for notification emission');
+    }
+  } catch (error) {
+    console.error('Error emitting notification via Socket.io:', error);
+    // Don't fail the notification creation if socket emission fails
   }
 
   return notification;

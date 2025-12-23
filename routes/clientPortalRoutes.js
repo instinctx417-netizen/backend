@@ -14,6 +14,8 @@ const analyticsController = require('../controllers/analyticsController');
 const dashboardController = require('../controllers/dashboardController');
 const interviewLogController = require('../controllers/interviewLogController');
 const invitationLogController = require('../controllers/invitationLogController');
+const staffController = require('../controllers/staffController');
+const ticketController = require('../controllers/ticketController');
 
 // Public routes (no authentication required)
 // Get invitation by token (for signup page - users are not logged in yet)
@@ -27,6 +29,7 @@ router.post('/organizations', organizationController.create);
 router.get('/organizations', organizationController.getUserOrganizations);
 router.get('/organizations/:id', organizationController.getById);
 router.get('/organizations/:organizationId/users', organizationController.getOrganizationUsers);
+router.get('/organizations/:organizationId/staff', organizationController.getOrganizationStaff);
 router.post('/organizations/:organizationId/departments', organizationController.createDepartment);
 router.get('/organizations/:organizationId/departments', organizationController.getDepartments);
 
@@ -42,8 +45,13 @@ router.put('/job-requests/:id', jobRequestController.update);
 router.get('/job-requests/:jobRequestId/candidates', candidateController.getByJobRequest);
 router.get('/candidates/:id', candidateController.getById);
 router.put('/candidates/:id/status', candidateController.updateStatus);
+router.post('/candidates/:id/hire', candidateController.hireCandidate);
 // Candidate user profile (admin & HR only, shared endpoint)
 router.get('/candidate-users/:id', candidateController.getCandidateUserDetails);
+
+// Staff profile routes (for staff members themselves)
+router.get('/staff/profile', staffController.getStaffProfile);
+router.put('/staff/profile', staffController.updateStaffProfile);
 
 // Interview routes
 router.post('/interviews', interviewController.create);
@@ -66,6 +74,7 @@ router.get('/notifications', notificationController.getUserNotifications);
 router.get('/notifications/unread-count', notificationController.getUnreadCount);
 router.put('/notifications/:id/read', notificationController.markAsRead);
 router.put('/notifications/read-all', notificationController.markAllAsRead);
+router.put('/notifications/read-by-related-entity', notificationController.markAsReadByRelatedEntity);
 
 // Dashboard routes
 router.get('/organizations/:organizationId/dashboard/departments', dashboardController.getDepartmentStatusDashboard);
@@ -93,6 +102,7 @@ router.get('/admin/organizations', adminController.getAllOrganizations);
 router.post('/admin/organizations/:organizationId/activate', adminController.activateOrganization);
 router.post('/admin/organizations/:organizationId/deactivate', adminController.deactivateOrganization);
 router.get('/admin/candidates', adminController.getCandidateUsers);
+router.get('/admin/staff', adminController.getStaffMembers);
 router.get('/admin/interviews', interviewController.getAll);
 
 // HR routes
@@ -106,6 +116,23 @@ router.get('/hr/interviews', interviewController.getByAssignedHR);
 // Log routes (admin only)
 router.get('/admin/interview-logs', interviewLogController.getInterviewLogs);
 router.get('/admin/invitation-logs', invitationLogController.getInvitationLogs);
+
+// Ticket routes
+// Staff routes
+router.post('/tickets', ticketController.createTicket);
+router.get('/tickets/my-tickets', ticketController.getMyTickets);
+
+// HR routes (must be before /tickets/:id to avoid route conflict)
+router.get('/tickets/assigned', ticketController.getAssignedTickets);
+
+// Parameterized routes (must come after specific routes)
+router.get('/tickets/:id', ticketController.getTicketById);
+router.post('/tickets/:id/messages', ticketController.addMessage);
+router.put('/tickets/:id/status', ticketController.updateTicketStatus);
+router.put('/tickets/:id/assign', ticketController.assignTicket);
+
+// Admin routes
+router.get('/admin/tickets', ticketController.getAllTickets);
 
 module.exports = router;
 

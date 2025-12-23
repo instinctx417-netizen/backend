@@ -180,6 +180,55 @@ class Notification {
     return parseInt(result.rows[0].count);
   }
 
+  /**
+   * Mark notifications as read by related entity
+   */
+  static async markAsReadByRelatedEntity(userId, relatedEntityType, relatedEntityId) {
+    const query = `
+      UPDATE notifications 
+      SET read = true, read_at = NOW()
+      WHERE user_id = $1 
+        AND related_entity_type = $2 
+        AND related_entity_id = $3 
+        AND read = false
+      RETURNING id
+    `;
+    const result = await pool.query(query, [userId, relatedEntityType, relatedEntityId]);
+    return result.rows;
+  }
+
+  /**
+   * Get unread count per ticket for a user
+   */
+  static async getUnreadCountsByTickets(userId, ticketIds) {
+    if (!ticketIds || ticketIds.length === 0) {
+      return {};
+    }
+
+    const placeholders = ticketIds.map((_, index) => `$${index + 2}`).join(', ');
+    const query = `
+      SELECT 
+        related_entity_id as ticket_id,
+        COUNT(*) as count
+      FROM notifications
+      WHERE user_id = $1
+        AND related_entity_type = 'ticket'
+        AND related_entity_id IN (${placeholders})
+        AND read = false
+      GROUP BY related_entity_id
+    `;
+    
+    const result = await pool.query(query, [userId, ...ticketIds]);
+    
+    // Convert to object with ticket ID as key
+    const counts = {};
+    result.rows.forEach(row => {
+      counts[row.ticket_id] = parseInt(row.count, 10);
+    });
+    
+    return counts;
+  }
+
 }
 
 module.exports = Notification;

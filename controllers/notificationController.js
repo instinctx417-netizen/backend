@@ -202,6 +202,56 @@ exports.markAllAsRead = async (req, res) => {
   }
 };
 
+/**
+ * Mark notifications as read by related entity
+ */
+exports.markAsReadByRelatedEntity = async (req, res) => {
+  try {
+    const { relatedEntityType, relatedEntityId } = req.body;
+    
+    if (!relatedEntityType || !relatedEntityId) {
+      return res.status(400).json({
+        success: false,
+        message: 'relatedEntityType and relatedEntityId are required',
+      });
+    }
+
+    const notifications = await Notification.markAsReadByRelatedEntity(
+      req.userId,
+      relatedEntityType,
+      relatedEntityId
+    );
+
+    // Emit real-time update
+    const io = req.app.get('io');
+    if (io) {
+      // Emit update for each notification
+      notifications.forEach((notif) => {
+        emitNotificationUpdate(io, req.userId, {
+          id: notif.id,
+          read: true,
+        });
+      });
+
+      const unreadCount = await Notification.getUnreadCount(req.userId);
+      emitUnreadCountUpdate(io, req.userId, unreadCount);
+    }
+
+    res.json({
+      success: true,
+      message: 'Notifications marked as read',
+      data: { count: notifications.length },
+    });
+  } catch (error) {
+    console.error('Mark notifications as read by related entity error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+    });
+  }
+};
+
 
 
 

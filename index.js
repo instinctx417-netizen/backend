@@ -29,6 +29,12 @@ io.on('connection', (socket) => {
     console.log(`User ${userId} joined their notification room`);
   });
 
+  // Join admin room
+  socket.on('join-admin-room', () => {
+    socket.join('admin-room');
+    console.log(`Admin joined admin room`);
+  });
+
   socket.on('disconnect', () => {
     console.log('Client disconnected:', socket.id);
   });

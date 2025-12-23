@@ -73,6 +73,36 @@ async function runMigrations() {
     await pool.query(sql11);
     console.log('✅ Migration 011 completed: invitation_logs table created');
 
+    // Run migration 012
+    const migration12 = path.join(__dirname, '..', 'migrations', '012_create_site_staff.sql');
+    const sql12 = fs.readFileSync(migration12, 'utf8');
+    await pool.query(sql12);
+    console.log('✅ Migration 012 completed: site_staff table created');
+
+    // Run migration 013
+    const migration13 = path.join(__dirname, '..', 'migrations', '013_add_hired_action_type.sql');
+    const sql13 = fs.readFileSync(migration13, 'utf8');
+    await pool.query(sql13);
+    console.log('✅ Migration 013 completed: hired action type added to interview_logs');
+
+    // Run migration 014
+    const migration14 = path.join(__dirname, '..', 'migrations', '014_add_staff_profile_data.sql');
+    const sql14 = fs.readFileSync(migration14, 'utf8');
+    await pool.query(sql14);
+    console.log('✅ Migration 014 completed: staff profile_data column added');
+
+    // Run migration 015
+    const migration15 = path.join(__dirname, '..', 'migrations', '015_create_tickets.sql');
+    const sql15 = fs.readFileSync(migration15, 'utf8');
+    await pool.query(sql15);
+    console.log('✅ Migration 015 completed: tickets and ticket_messages tables created');
+
+    // Run migration 016
+    const migration16 = path.join(__dirname, '..', 'migrations', '016_add_ticket_notification_types.sql');
+    const sql16 = fs.readFileSync(migration16, 'utf8');
+    await pool.query(sql16);
+    console.log('✅ Migration 016 completed: ticket notification types added');
+
     console.log('✅ All migrations completed successfully');
   } catch (error) {
     console.error('❌ Migration failed:', error);

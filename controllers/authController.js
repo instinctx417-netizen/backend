@@ -495,6 +495,18 @@ exports.login = async (req, res) => {
       });
     }
 
+    // Check if candidate user is hired (has active site_staff record)
+    if (user.user_type === 'candidate') {
+      const SiteStaff = require('../models/SiteStaff');
+      const activeStaff = await SiteStaff.findByUserId(user.id);
+      if (!activeStaff || activeStaff.length === 0) {
+        return res.status(403).json({
+          success: false,
+          message: 'Candidate accounts are for office use only. Please contact support if you have been hired.',
+        });
+      }
+    }
+
     // Verify password
     const isPasswordValid = await User.verifyPassword(password, user.password_hash);
     if (!isPasswordValid) {

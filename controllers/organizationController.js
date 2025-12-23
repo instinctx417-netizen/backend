@@ -95,6 +95,129 @@ exports.getById = async (req, res) => {
 };
 
 /**
+ * Get staff members for organization (Client and HR COO only)
+ */
+exports.getOrganizationStaff = async (req, res) => {
+  try {
+    const { organizationId } = req.params;
+    const { page, limit } = req.query;
+    const pageNum = page ? parseInt(page, 10) || 1 : null;
+    const limitNum = limit ? parseInt(limit, 10) || 10 : 10;
+
+    // Verify user has access to this organization
+    const userOrg = await UserOrganization.findByUserAndOrganization(req.userId, organizationId);
+    if (!userOrg) {
+      return res.status(403).json({
+        success: false,
+        message: 'You do not have access to this organization',
+      });
+    }
+
+    // Verify user is client or HR COO
+    const user = await User.findById(req.userId);
+    if (!user || (user.user_type !== 'client' && (user.user_type !== 'hr' || userOrg.role !== 'hr_coo'))) {
+      return res.status(403).json({
+        success: false,
+        message: 'Only clients and HR COO can view staff members',
+      });
+    }
+
+    const pool = require('../config/database');
+    const SiteStaff = require('../models/SiteStaff');
+
+    // Build query to get staff members for this organization
+    let query = `
+      SELECT DISTINCT u.*, 
+        ss.id as staff_id,
+        ss.position_title,
+        ss.hired_at
+      FROM users u
+      INNER JOIN site_staff ss ON ss.user_id = u.id
+      WHERE ss.organization_id = $1 AND ss.status = 'active'
+    `;
+    const params = [organizationId];
+    
+    query += ' ORDER BY ss.hired_at DESC';
+
+    // Handle pagination
+    let totalCount = null;
+    if (pageNum && limitNum) {
+      // Build count query
+      let countQuery = `
+        SELECT COUNT(DISTINCT u.id) as count
+        FROM users u
+        INNER JOIN site_staff ss ON ss.user_id = u.id
+        WHERE ss.organization_id = $1 AND ss.status = 'active'
+      `;
+      
+      const countResult = await pool.query(countQuery, [organizationId]);
+      totalCount = parseInt(countResult.rows[0].count, 10) || 0;
+
+      const offset = (pageNum - 1) * limitNum;
+      query += ` LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+      params.push(limitNum, offset);
+    }
+
+    const result = await pool.query(query, params);
+    const staffUsers = result.rows;
+
+    // Format staff users
+    const formatUserData = (user) => {
+      return {
+        id: user.id,
+        email: user.email,
+        firstName: user.first_name,
+        lastName: user.last_name,
+        fullName: user.full_name,
+        phone: user.phone,
+        userType: user.user_type,
+        location: user.location,
+        country: user.country,
+        primaryFunction: user.primary_function,
+        yearsExperience: user.years_experience,
+        currentRole: user.current_role,
+        linkedIn: user.linkedin_url,
+        portfolio: user.portfolio_url,
+        createdAt: user.created_at,
+        // Staff-specific fields
+        staffId: user.staff_id,
+        positionTitle: user.position_title,
+        hiredAt: user.hired_at,
+      };
+    };
+    const formattedStaff = staffUsers.map(u => formatUserData(u));
+
+    let pagination = undefined;
+    if (pageNum && limitNum && totalCount !== null) {
+      const totalPages = Math.ceil(totalCount / limitNum);
+      pagination = {
+        page: pageNum,
+        limit: limitNum,
+        totalCount,
+        totalPages,
+        hasNext: pageNum < totalPages,
+        hasPrev: pageNum > 1,
+      };
+    }
+
+    res.json({
+      success: true,
+      data: { 
+        staff: formattedStaff,
+        ...(pagination ? { pagination } : {}),
+      },
+    });
+  } catch (error) {
+    console.error('Get organization staff error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+    });
+  }
+};
+
+/**
  * Get user's organizations
  */
 exports.getUserOrganizations = async (req, res) => {

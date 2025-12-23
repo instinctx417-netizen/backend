@@ -648,7 +648,127 @@ exports.getAllOrganizations = async (req, res) => {
 };
 
 /**
+ * Get all staff members (admin only)
+ * Returns users who have active site_staff records
+ */
+exports.getStaffMembers = async (req, res) => {
+  try {
+    // Verify user is admin
+    const admin = await User.findById(req.userId);
+    if (!admin || admin.user_type !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Only admins can view staff members',
+      });
+    }
+
+    const { page, limit } = req.query;
+    const pageNum = page ? parseInt(page, 10) || 1 : null;
+    const limitNum = limit ? parseInt(limit, 10) || 10 : 10;
+
+    const pool = require('../config/database');
+    const SiteStaff = require('../models/SiteStaff');
+
+    // Build query to get staff members (users with active site_staff records)
+    let query = `
+      SELECT DISTINCT u.*, 
+        ss.id as staff_id,
+        ss.position_title,
+        ss.hired_at,
+        ss.organization_id,
+        o.name as organization_name
+      FROM users u
+      INNER JOIN site_staff ss ON ss.user_id = u.id
+      LEFT JOIN organizations o ON o.id = ss.organization_id
+      WHERE ss.status = 'active'
+    `;
+    const params = [];
+    
+    query += ' ORDER BY ss.hired_at DESC';
+
+    // Handle pagination
+    let totalCount = null;
+    if (pageNum && limitNum) {
+      // Build count query
+      let countQuery = `
+        SELECT COUNT(DISTINCT u.id) as count
+        FROM users u
+        INNER JOIN site_staff ss ON ss.user_id = u.id
+        WHERE ss.status = 'active'
+      `;
+      
+      const countResult = await pool.query(countQuery, []);
+      totalCount = parseInt(countResult.rows[0].count, 10) || 0;
+
+      const offset = (pageNum - 1) * limitNum;
+      query += ` LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+      params.push(limitNum, offset);
+    }
+
+    const result = await pool.query(query, params);
+    const staffUsers = result.rows;
+
+    // Format staff users
+    const formatUserData = (user) => {
+      return {
+        id: user.id,
+        email: user.email,
+        firstName: user.first_name,
+        lastName: user.last_name,
+        fullName: user.full_name,
+        phone: user.phone,
+        userType: user.user_type,
+        location: user.location,
+        country: user.country,
+        primaryFunction: user.primary_function,
+        yearsExperience: user.years_experience,
+        currentRole: user.current_role,
+        linkedIn: user.linkedin_url,
+        portfolio: user.portfolio_url,
+        createdAt: user.created_at,
+        // Staff-specific fields
+        staffId: user.staff_id,
+        positionTitle: user.position_title,
+        hiredAt: user.hired_at,
+        organizationId: user.organization_id,
+        organizationName: user.organization_name,
+      };
+    };
+    const formattedStaff = staffUsers.map(u => formatUserData(u));
+
+    let pagination = undefined;
+    if (pageNum && limitNum && totalCount !== null) {
+      const totalPages = Math.ceil(totalCount / limitNum);
+      pagination = {
+        page: pageNum,
+        limit: limitNum,
+        totalCount,
+        totalPages,
+        hasNext: pageNum < totalPages,
+        hasPrev: pageNum > 1,
+      };
+    }
+
+    res.json({
+      success: true,
+      data: { 
+        staff: formattedStaff,
+        ...(pagination ? { pagination } : {}),
+      },
+    });
+  } catch (error) {
+    console.error('Get staff members error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+    });
+  }
+};
+
+/**
  * Get all candidate users (admin only)
+ * Excludes candidates who have been hired (have active site_staff records)
  */
 exports.getCandidateUsers = async (req, res) => {
   try {
@@ -665,13 +785,56 @@ exports.getCandidateUsers = async (req, res) => {
     const pageNum = page ? parseInt(page, 10) || 1 : null;
     const limitNum = limit ? parseInt(limit, 10) || 10 : 10;
 
-    const result = pageNum
-      ? await User.findByType('candidate', { page: pageNum, limit: limitNum })
-      : await User.findByType('candidate');
+    const pool = require('../config/database');
+    const SiteStaff = require('../models/SiteStaff');
 
-    const candidateUsers = pageNum ? result.data : result;
-    const pagination = pageNum ? result.pagination : undefined;
+    // Get all hired user IDs (active site staff)
+    const hiredStaffQuery = `SELECT DISTINCT user_id FROM site_staff WHERE status = 'active'`;
+    const hiredStaffResult = await pool.query(hiredStaffQuery);
+    const hiredUserIds = hiredStaffResult.rows.map(row => row.user_id);
+
+    // Build query to exclude hired candidates
+    let query = `
+      SELECT u.* 
+      FROM users u
+      WHERE u.user_type = 'candidate'
+    `;
+    const params = [];
     
+    if (hiredUserIds.length > 0) {
+      query += ` AND u.id NOT IN (${hiredUserIds.map((_, i) => `$${i + 1}`).join(', ')})`;
+      params.push(...hiredUserIds);
+    }
+    
+    query += ' ORDER BY u.created_at DESC';
+
+    // Handle pagination
+    let totalCount = null;
+    if (pageNum && limitNum) {
+      // Build count query without ORDER BY
+      let countQuery = `
+        SELECT COUNT(*) as count
+        FROM users u
+        WHERE u.user_type = 'candidate'
+      `;
+      const countParams = [];
+      
+      if (hiredUserIds.length > 0) {
+        countQuery += ` AND u.id NOT IN (${hiredUserIds.map((_, i) => `$${i + 1}`).join(', ')})`;
+        countParams.push(...hiredUserIds);
+      }
+      
+      const countResult = await pool.query(countQuery, countParams);
+      totalCount = parseInt(countResult.rows[0].count, 10) || 0;
+
+      const offset = (pageNum - 1) * limitNum;
+      query += ` LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+      params.push(limitNum, offset);
+    }
+
+    const result = await pool.query(query, params);
+    const candidateUsers = result.rows;
+
     // Format candidate users (same format as HR endpoint)
     const formatUserData = (user) => {
       return {
@@ -693,6 +856,19 @@ exports.getCandidateUsers = async (req, res) => {
       };
     };
     const formattedCandidates = candidateUsers.map(u => formatUserData(u));
+
+    let pagination = undefined;
+    if (pageNum && limitNum && totalCount !== null) {
+      const totalPages = Math.ceil(totalCount / limitNum);
+      pagination = {
+        page: pageNum,
+        limit: limitNum,
+        totalCount,
+        totalPages,
+        hasNext: pageNum < totalPages,
+        hasPrev: pageNum > 1,
+      };
+    }
 
     res.json({
       success: true,

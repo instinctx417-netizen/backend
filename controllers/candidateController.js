@@ -3,6 +3,11 @@ const JobRequest = require('../models/JobRequest');
 const UserOrganization = require('../models/UserOrganization');
 const Notification = require('../models/Notification');
 const User = require('../models/User');
+const SiteStaff = require('../models/SiteStaff');
+const Organization = require('../models/Organization');
+const Interview = require('../models/Interview');
+const InterviewLog = require('../models/InterviewLog');
+const { sendTemplatedEmail } = require('../utils/emailService');
 
 /**
  * Get candidates for a job request
@@ -163,36 +168,69 @@ exports.updateStatus = async (req, res) => {
       });
     }
 
+    // Get old status before update
+    const oldStatus = candidate.status;
+    
     const updated = await Candidate.updateStatus(id, status);
 
-    // Notify about candidate selection
-    if (status === 'selected') {
-      try {
-        const UserOrganization = require('../models/UserOrganization');
-        const { notifyCandidateSelected } = require('../utils/notificationService');
-        
-        // Get all users in the organization
-        const orgUsers = await UserOrganization.findByOrganization(jobRequest.organization_id);
-        if (orgUsers && orgUsers.length > 0) {
-          const userIds = orgUsers.map(uo => uo.user_id);
-          // Also notify assigned HR if exists
-          if (jobRequest.assigned_to_hr_user_id && !userIds.includes(jobRequest.assigned_to_hr_user_id)) {
-            userIds.push(jobRequest.assigned_to_hr_user_id);
-          }
-          const candidateName = updated.candidate_name || updated.name || 'Candidate';
-          await notifyCandidateSelected(
-            req,
-            userIds,
-            parseInt(id),
-            candidateName,
-            jobRequest.id,
-            jobRequest.title || jobRequest.job_title
-          );
+    // Log status change to interview_logs for all interviews related to this candidate
+    try {
+      const interviews = await Interview.findByCandidate(candidate.id);
+      const performer = await User.findById(req.userId);
+      
+      if (interviews && interviews.length > 0) {
+        for (const interview of interviews) {
+          await InterviewLog.create({
+            interviewId: interview.id,
+            actionType: 'status_changed',
+            performedByUserId: req.userId,
+            performedByUserType: performer?.user_type || null,
+            performedByUserName: performer ? `${performer.first_name || ''} ${performer.last_name || ''}`.trim() : null,
+            oldValue: { candidateStatus: oldStatus },
+            newValue: { candidateStatus: status },
+            details: {
+              candidateId: candidate.id,
+              candidateName: candidate.name,
+              jobRequestId: jobRequest.id,
+              jobRequestTitle: jobRequest.title || jobRequest.job_title
+            }
+          });
         }
-      } catch (notifError) {
-        console.error('Error sending candidate selection notification:', notifError);
-        // Don't fail the request if notification fails
       }
+    } catch (logError) {
+      console.error('Error logging candidate status change:', logError);
+      // Don't fail the request if logging fails
+    }
+
+    // Notify about candidate status change
+    try {
+      const UserOrganization = require('../models/UserOrganization');
+      const { notifyCandidateSelected } = require('../utils/notificationService');
+      
+      // Get all users in the organization
+      const orgUsers = await UserOrganization.findByOrganization(jobRequest.organization_id);
+      if (orgUsers && orgUsers.length > 0) {
+        const userIds = orgUsers.map(uo => uo.user_id);
+        // Also notify assigned HR if exists
+        if (jobRequest.assigned_to_hr_user_id && !userIds.includes(jobRequest.assigned_to_hr_user_id)) {
+          userIds.push(jobRequest.assigned_to_hr_user_id);
+        }
+        const candidateName = updated.candidate_name || updated.name || 'Candidate';
+        // Format status for display (replace underscores with spaces and capitalize)
+        const formattedStatus = status.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+        await notifyCandidateSelected(
+          req,
+          userIds,
+          parseInt(id),
+          candidateName,
+          jobRequest.id,
+          jobRequest.title || jobRequest.job_title,
+          formattedStatus
+        );
+      }
+    } catch (notifError) {
+      console.error('Error sending candidate status notification:', notifError);
+      // Don't fail the request if notification fails
     }
 
     res.json({
@@ -280,6 +318,180 @@ exports.getCandidateUserDetails = async (req, res) => {
     });
   } catch (error) {
     console.error('Get candidate user details error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+    });
+  }
+};
+
+/**
+ * Hire a candidate (convert to site staff)
+ */
+exports.hireCandidate = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const candidate = await Candidate.findById(id);
+    if (!candidate) {
+      return res.status(404).json({
+        success: false,
+        message: 'Candidate not found',
+      });
+    }
+
+    // Verify candidate status is 'selected'
+    if (candidate.status !== 'selected') {
+      return res.status(400).json({
+        success: false,
+        message: 'Only selected candidates can be hired',
+      });
+    }
+
+    // Verify user has access
+    const jobRequest = await JobRequest.findById(candidate.job_request_id);
+    if (!jobRequest) {
+      return res.status(404).json({
+        success: false,
+        message: 'Job request not found',
+      });
+    }
+
+    // Get the current user
+    const user = await User.findById(req.userId);
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: 'User not found',
+      });
+    }
+
+    // Only admin and HR users can hire candidates
+    if (user.user_type !== 'admin' && user.user_type !== 'hr') {
+      return res.status(403).json({
+        success: false,
+        message: 'Only admin and HR users can hire candidates',
+      });
+    }
+
+    let hasAccess = false;
+
+    // Admin users have access to all candidates
+    if (user.user_type === 'admin') {
+      hasAccess = true;
+    }
+    // HR users have access if the job request is assigned to them OR if they belong to the organization (site HR)
+    else if (user.user_type === 'hr') {
+      const isAssignedHR = jobRequest.assigned_to_hr_user_id === parseInt(req.userId);
+      const userOrg = await UserOrganization.findByUserAndOrganization(
+        req.userId,
+        jobRequest.organization_id
+      );
+      hasAccess = isAssignedHR || !!userOrg;
+    }
+
+    if (!hasAccess) {
+      return res.status(403).json({
+        success: false,
+        message: 'You do not have access to hire this candidate',
+      });
+    }
+
+    // Check if candidate is already hired
+    const existingStaff = await SiteStaff.findByCandidateId(candidate.id);
+    if (existingStaff && existingStaff.status === 'active') {
+      return res.status(400).json({
+        success: false,
+        message: 'This candidate has already been hired',
+      });
+    }
+
+    // Verify candidate has a user_id (must be a registered user)
+    if (!candidate.user_id) {
+      return res.status(400).json({
+        success: false,
+        message: 'Candidate must be a registered user to be hired',
+      });
+    }
+
+    // Create site staff record
+    const siteStaff = await SiteStaff.create({
+      userId: candidate.user_id,
+      candidateId: candidate.id,
+      jobRequestId: jobRequest.id,
+      organizationId: jobRequest.organization_id,
+      positionTitle: jobRequest.title
+    });
+
+    // Update candidate status to 'hired'
+    await Candidate.updateStatus(id, 'hired');
+
+    // Log hiring action to interview_logs for all interviews related to this candidate
+    try {
+      const interviews = await Interview.findByCandidate(candidate.id);
+      const performer = await User.findById(req.userId);
+      
+      if (interviews && interviews.length > 0) {
+        for (const interview of interviews) {
+          await InterviewLog.create({
+            interviewId: interview.id,
+            actionType: 'hired',
+            performedByUserId: req.userId,
+            performedByUserType: performer?.user_type || null,
+            performedByUserName: performer ? `${performer.first_name || ''} ${performer.last_name || ''}`.trim() : null,
+            oldValue: { candidateStatus: 'selected' },
+            newValue: { candidateStatus: 'hired', siteStaffId: siteStaff.id },
+            details: {
+              candidateId: candidate.id,
+              candidateName: candidate.name,
+              jobRequestId: jobRequest.id,
+              jobRequestTitle: jobRequest.title,
+              organizationId: jobRequest.organization_id,
+              positionTitle: jobRequest.title
+            }
+          });
+        }
+      }
+    } catch (logError) {
+      console.error('Error logging hire action:', logError);
+      // Don't fail the request if logging fails
+    }
+
+    // Get candidate user details for email
+    const candidateUser = await User.findById(candidate.user_id);
+    if (candidateUser && candidateUser.email) {
+      try {
+        // Send hire notification email
+        const organization = await Organization.findById(jobRequest.organization_id);
+        const { sendTemplatedEmail } = require('../utils/emailService');
+        
+        const candidateName = candidateUser.full_name || `${candidateUser.first_name || ''} ${candidateUser.last_name || ''}`.trim() || 'Candidate';
+        
+        await sendTemplatedEmail(
+          candidateUser.email,
+          'candidateHired',
+          {
+            candidateName,
+            positionTitle: jobRequest.title,
+            organizationName: organization ? organization.name : 'the organization',
+            hiredDate: new Date().toLocaleDateString()
+          },
+          `Congratulations! You've Been Hired - ${jobRequest.title}`
+        );
+      } catch (emailError) {
+        console.error('Error sending hire email:', emailError);
+        // Don't fail the request if email fails
+      }
+    }
+
+    res.json({
+      success: true,
+      message: 'Candidate hired successfully',
+      data: { siteStaff },
+    });
+  } catch (error) {
+    console.error('Hire candidate error:', error);
     res.status(500).json({
       success: false,
       message: 'Internal server error',

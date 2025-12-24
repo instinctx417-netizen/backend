@@ -1,10 +1,11 @@
 -- Add new notification types to the notifications table CHECK constraint
 -- This migration adds support for organization activation/deactivation and other notification types
+-- Updated to include ticket notification types for compatibility with migration 016
 
 -- Drop the existing constraint
 ALTER TABLE notifications DROP CONSTRAINT IF EXISTS notifications_type_check;
 
--- Add the constraint with all notification types (existing + new)
+-- Add the constraint with all notification types (existing + new + ticket types)
 ALTER TABLE notifications ADD CONSTRAINT notifications_type_check 
   CHECK (type IN (
     -- Existing types
@@ -34,6 +35,10 @@ ALTER TABLE notifications ADD CONSTRAINT notifications_type_check
     -- New types for invitations
     'invitation_accepted',
     -- System announcements
-    'system_announcement'
+    'system_announcement',
+    -- Ticket types (included for compatibility with migration 016)
+    'ticket_created',
+    'ticket_message',
+    'ticket_assigned'
   ));
 

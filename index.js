@@ -46,7 +46,14 @@ app.use(cors({
   origin: true,
   credentials: true,
 }));
-app.use(express.json());
+// Skip JSON parsing for multipart/form-data (file uploads)
+app.use((req, res, next) => {
+  const contentType = req.headers['content-type'] || '';
+  if (contentType.includes('multipart/form-data')) {
+    return next();
+  }
+  express.json()(req, res, next);
+});
 app.use(express.urlencoded({ extended: true }));
 
 // Health check route

@@ -103,6 +103,12 @@ async function runMigrations() {
     await pool.query(sql16);
     console.log('✅ Migration 016 completed: ticket notification types added');
 
+    // Run migration 017
+    const migration17 = path.join(__dirname, '..', 'migrations', '017_create_training_tables.sql');
+    const sql17 = fs.readFileSync(migration17, 'utf8');
+    await pool.query(sql17);
+    console.log('✅ Migration 017 completed: training and onboarding tables created');
+
     console.log('✅ All migrations completed successfully');
   } catch (error) {
     console.error('❌ Migration failed:', error);

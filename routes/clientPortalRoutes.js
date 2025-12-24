@@ -16,6 +16,8 @@ const interviewLogController = require('../controllers/interviewLogController');
 const invitationLogController = require('../controllers/invitationLogController');
 const staffController = require('../controllers/staffController');
 const ticketController = require('../controllers/ticketController');
+const trainingController = require('../controllers/trainingController');
+const onboardingController = require('../controllers/onboardingController');
 
 // Public routes (no authentication required)
 // Get invitation by token (for signup page - users are not logged in yet)
@@ -133,6 +135,32 @@ router.put('/tickets/:id/assign', ticketController.assignTicket);
 
 // Admin routes
 router.get('/admin/tickets', ticketController.getAllTickets);
+
+// Training routes
+// Videos
+router.get('/training/videos', trainingController.getVideos);
+router.post('/training/videos', trainingController.createVideo);
+router.put('/training/videos/:id', trainingController.updateVideo);
+router.delete('/training/videos/:id', trainingController.deleteVideo);
+
+// Quizzes
+router.get('/training/quizzes', trainingController.getQuizzes);
+router.post('/training/quizzes', trainingController.createQuiz);
+router.put('/training/quizzes/:id', trainingController.updateQuiz);
+router.delete('/training/quizzes/:id', trainingController.deleteQuiz);
+router.post('/training/quizzes/answer', trainingController.submitQuizAnswer);
+router.get('/training/quizzes/stats', trainingController.getQuizStats);
+
+// Onboarding routes
+const multer = require('multer');
+const upload = multer({ storage: multer.memoryStorage() });
+
+router.get('/onboarding/requirements', onboardingController.getRequirements);
+router.post('/onboarding/requirements', onboardingController.createRequirement);
+router.put('/onboarding/requirements/:id', onboardingController.updateRequirement);
+router.delete('/onboarding/requirements/:id', onboardingController.deleteRequirement);
+router.post('/onboarding/submit', upload.single('file'), onboardingController.submitFile);
+router.delete('/onboarding/submissions/:id', onboardingController.deleteSubmission);
 
 module.exports = router;
 

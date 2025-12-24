@@ -739,6 +739,38 @@ exports.updateTicketStatus = async (req, res) => {
 
     const updated = await Ticket.update(id, { status });
 
+    // Emit socket event for real-time status update
+    try {
+      const io = req.app.get('io');
+      if (io) {
+        // Notify ticket creator (staff)
+        io.to(`user-${ticket.created_by_user_id}`).emit('ticket-status-updated', {
+          ticketId: ticket.id,
+          status: status,
+          ticket: updated,
+        });
+
+        // Notify assigned HR user if ticket is assigned
+        if (ticket.assigned_to_user_id) {
+          io.to(`user-${ticket.assigned_to_user_id}`).emit('ticket-status-updated', {
+            ticketId: ticket.id,
+            status: status,
+            ticket: updated,
+          });
+        }
+
+        // Notify admin room
+        io.to('admin-room').emit('ticket-status-updated', {
+          ticketId: ticket.id,
+          status: status,
+          ticket: updated,
+        });
+      }
+    } catch (socketError) {
+      console.error('Error emitting ticket status update:', socketError);
+      // Don't fail the request if socket emission fails
+    }
+
     res.json({
       success: true,
       message: 'Ticket status updated successfully',

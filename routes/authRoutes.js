@@ -44,5 +44,19 @@ router.get('/profile', authenticate, authController.getProfile);
  */
 router.get('/verify', authenticate, authController.verifyToken);
 
+/**
+ * @route   POST /api/auth/generate-community-token
+ * @desc    Generate temporary token for community app access
+ * @access  Private
+ */
+router.post('/generate-community-token', authenticate, authController.generateCommunityToken);
+
+/**
+ * @route   POST /api/auth/exchange-community-token
+ * @desc    Exchange temporary code for JWT token
+ * @access  Public
+ */
+router.post('/exchange-community-token', authController.exchangeCommunityToken);
+
 module.exports = router;
 

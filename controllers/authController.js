@@ -607,3 +607,139 @@ exports.verifyToken = async (req, res) => {
   }
 };
 
+// In-memory store for community tokens (code -> { userId, expiresAt, used })
+// In production, consider using Redis or a database table for multi-server support
+const communityTokenStore = new Map();
+
+// Cleanup expired tokens every 5 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [code, data] of communityTokenStore.entries()) {
+    if (data.expiresAt < now) {
+      communityTokenStore.delete(code);
+    }
+  }
+}, 5 * 60 * 1000);
+
+/**
+ * Generate a temporary token for community app access
+ * @route   POST /api/auth/generate-community-token
+ * @access  Private
+ */
+exports.generateCommunityToken = async (req, res) => {
+  try {
+    const userId = req.userId;
+    
+    // Generate a random 32-character code
+    const code = require('crypto').randomBytes(16).toString('hex');
+    
+    // Set expiration to 5 minutes from now
+    const expiresAt = Date.now() + (5 * 60 * 1000);
+    
+    // Store the code with user ID and expiration
+    communityTokenStore.set(code, {
+      userId,
+      expiresAt,
+      used: false,
+    });
+    
+    res.json({
+      success: true,
+      data: {
+        code,
+        expiresIn: 300, // 5 minutes in seconds
+      },
+    });
+  } catch (error) {
+    console.error('Generate community token error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+    });
+  }
+};
+
+/**
+ * Exchange temporary code for JWT token
+ * @route   POST /api/auth/exchange-community-token
+ * @access  Public
+ */
+exports.exchangeCommunityToken = async (req, res) => {
+  try {
+    const { code } = req.body;
+    
+    if (!code) {
+      return res.status(400).json({
+        success: false,
+        message: 'Code is required',
+      });
+    }
+    
+    // Get token data from store
+    const tokenData = communityTokenStore.get(code);
+    
+    if (!tokenData) {
+      return res.status(404).json({
+        success: false,
+        message: 'Invalid or expired code',
+      });
+    }
+    
+    // Check if code has expired
+    if (tokenData.expiresAt < Date.now()) {
+      communityTokenStore.delete(code);
+      return res.status(400).json({
+        success: false,
+        message: 'Code has expired',
+      });
+    }
+    
+    // Check if code has already been used
+    if (tokenData.used) {
+      return res.status(400).json({
+        success: false,
+        message: 'Code has already been used',
+      });
+    }
+    
+    // Mark code as used (one-time use)
+    tokenData.used = true;
+    
+    // Get user data
+    const user = await User.findById(tokenData.userId);
+    
+    if (!user) {
+      communityTokenStore.delete(code);
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+      });
+    }
+    
+    // Generate JWT token
+    const token = generateToken(user.id);
+    
+    // Format user data with role
+    const formattedUser = await formatUserData(user);
+    
+    // Clean up the used code
+    communityTokenStore.delete(code);
+    
+    res.json({
+      success: true,
+      data: {
+        user: formattedUser,
+        token,
+      },
+    });
+  } catch (error) {
+    console.error('Exchange community token error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+    });
+  }
+};
+

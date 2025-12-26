@@ -9,8 +9,8 @@ CREATE TABLE IF NOT EXISTS training_videos (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_training_videos_display_order ON training_videos(display_order);
-CREATE INDEX idx_training_videos_created_by ON training_videos(created_by_user_id);
+CREATE INDEX IF NOT EXISTS idx_training_videos_display_order ON training_videos(display_order);
+CREATE INDEX IF NOT EXISTS idx_training_videos_created_by ON training_videos(created_by_user_id);
 
 -- Quizzes table
 CREATE TABLE IF NOT EXISTS quizzes (
@@ -27,8 +27,8 @@ CREATE TABLE IF NOT EXISTS quizzes (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_quizzes_created_by ON quizzes(created_by_user_id);
-CREATE INDEX idx_quizzes_version ON quizzes(version);
+CREATE INDEX IF NOT EXISTS idx_quizzes_created_by ON quizzes(created_by_user_id);
+CREATE INDEX IF NOT EXISTS idx_quizzes_version ON quizzes(version);
 
 -- Quiz Answers table (staff answers to quizzes)
 CREATE TABLE IF NOT EXISTS quiz_answers (
@@ -43,9 +43,9 @@ CREATE TABLE IF NOT EXISTS quiz_answers (
   UNIQUE(quiz_id, user_id, quiz_version) -- One answer per user per quiz version
 );
 
-CREATE INDEX idx_quiz_answers_quiz_id ON quiz_answers(quiz_id);
-CREATE INDEX idx_quiz_answers_user_id ON quiz_answers(user_id);
-CREATE INDEX idx_quiz_answers_quiz_version ON quiz_answers(quiz_version);
+CREATE INDEX IF NOT EXISTS idx_quiz_answers_quiz_id ON quiz_answers(quiz_id);
+CREATE INDEX IF NOT EXISTS idx_quiz_answers_user_id ON quiz_answers(user_id);
+CREATE INDEX IF NOT EXISTS idx_quiz_answers_quiz_version ON quiz_answers(quiz_version);
 
 -- Onboarding Requirements table (admin defines what files staff should upload)
 CREATE TABLE IF NOT EXISTS onboarding_requirements (
@@ -59,8 +59,8 @@ CREATE TABLE IF NOT EXISTS onboarding_requirements (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_onboarding_requirements_display_order ON onboarding_requirements(display_order);
-CREATE INDEX idx_onboarding_requirements_created_by ON onboarding_requirements(created_by_user_id);
+CREATE INDEX IF NOT EXISTS idx_onboarding_requirements_display_order ON onboarding_requirements(display_order);
+CREATE INDEX IF NOT EXISTS idx_onboarding_requirements_created_by ON onboarding_requirements(created_by_user_id);
 
 -- Onboarding Submissions table (staff uploads)
 CREATE TABLE IF NOT EXISTS onboarding_submissions (
@@ -75,6 +75,6 @@ CREATE TABLE IF NOT EXISTS onboarding_submissions (
   UNIQUE(requirement_id, user_id) -- One submission per requirement per user
 );
 
-CREATE INDEX idx_onboarding_submissions_requirement_id ON onboarding_submissions(requirement_id);
-CREATE INDEX idx_onboarding_submissions_user_id ON onboarding_submissions(user_id);
+CREATE INDEX IF NOT EXISTS idx_onboarding_submissions_requirement_id ON onboarding_submissions(requirement_id);
+CREATE INDEX IF NOT EXISTS idx_onboarding_submissions_user_id ON onboarding_submissions(user_id);
 

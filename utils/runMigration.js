@@ -109,6 +109,30 @@ async function runMigrations() {
     await pool.query(sql17);
     console.log('✅ Migration 017 completed: training and onboarding tables created');
 
+    // Run migration 018
+    const migration18 = path.join(__dirname, '..', 'migrations', '018_create_community_tables.sql');
+    const sql18 = fs.readFileSync(migration18, 'utf8');
+    await pool.query(sql18);
+    console.log('✅ Migration 018 completed: community tables created');
+
+    // Run migration 019
+    const migration19 = path.join(__dirname, '..', 'migrations', '019_add_shared_post_id.sql');
+    const sql19 = fs.readFileSync(migration19, 'utf8');
+    await pool.query(sql19);
+    console.log('✅ Migration 019 completed: shared_post_id column added');
+
+    // Run migration 020
+    const migration20 = path.join(__dirname, '..', 'migrations', '020_remove_share_unique_constraint.sql');
+    const sql20 = fs.readFileSync(migration20, 'utf8');
+    await pool.query(sql20);
+    console.log('✅ Migration 020 completed: share unique constraint removed');
+
+    // Run migration 021
+    const migration21 = path.join(__dirname, '..', 'migrations', '021_allow_null_content.sql');
+    const sql21 = fs.readFileSync(migration21, 'utf8');
+    await pool.query(sql21);
+    console.log('✅ Migration 021 completed: content column now allows NULL');
+
     console.log('✅ All migrations completed successfully');
   } catch (error) {
     console.error('❌ Migration failed:', error);

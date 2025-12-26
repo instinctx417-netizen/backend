@@ -15,9 +15,12 @@ JWT_EXPIRES_IN=7d
 JWT_REFRESH_SECRET=Z9q$W4eF!rT8%uI1mB6&kS3dA7@pV0nL$hC*oG^xY$QwE
 JWT_REFRESH_EXPIRES_IN=30d
 
-# Frontend URL (for CORS)
+# Frontend URL (for CORS & Emails)
 #https://prod.d199ohr0jh1wjk.amplifyapp.com
 FRONTEND_URL=https://instinctxai.com
+
+# Community URL (for CORS)
+COMMUNITY_URL=https://community.instinctxai.com
 
 # AWS S3
 AWS_ACCESS_KEY_ID=YOUR_AWS_ACCESS_KEY_ID-

@@ -8,10 +8,36 @@ const authRoutes = require('./routes/authRoutes');
 const app = express();
 const server = http.createServer(app);
 
+// Allowed origins for CORS
+const allowedOrigins = [
+  process.env.FRONTEND_URL || 'http://localhost:3000',
+  process.env.COMMUNITY_URL || 'http://localhost:3001',
+  'https://instinctxai.com',
+  'https://www.instinctxai.com',
+  'https://community.instinctxai.com',
+];
+
 // Socket.io setup
 const io = new Server(server, {
   cors: {
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps or curl requests)
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
+      // Check if origin matches any allowed origin
+      const isAllowed = allowedOrigins.some(allowed => {
+        const allowedDomain = allowed.replace(/^https?:\/\//, '');
+        const originDomain = origin.replace(/^https?:\/\//, '');
+        return originDomain === allowedDomain || originDomain.includes(allowedDomain);
+      });
+      if (isAllowed) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     credentials: true,
   },
 });
@@ -42,8 +68,24 @@ io.on('connection', (socket) => {
 
 // Middleware
 app.use(cors({
-  //origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-  origin: true,
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) {
+      callback(null, true);
+      return;
+    }
+    // Check if origin matches any allowed origin
+    const isAllowed = allowedOrigins.some(allowed => {
+      const allowedDomain = allowed.replace(/^https?:\/\//, '');
+      const originDomain = origin.replace(/^https?:\/\//, '');
+      return originDomain === allowedDomain || originDomain.includes(allowedDomain);
+    });
+    if (isAllowed) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
 }));
 // Skip JSON parsing for multipart/form-data (file uploads)
@@ -76,6 +118,10 @@ app.use('/api/auth', authRoutes);
 // Client Portal routes
 const clientPortalRoutes = require('./routes/clientPortalRoutes');
 app.use('/api/client-portal', clientPortalRoutes);
+
+// Community routes (separate from client portal)
+const communityRoutes = require('./routes/communityRoutes');
+app.use('/api/community', communityRoutes);
 
 // 404 handler
 app.use((req, res) => {
